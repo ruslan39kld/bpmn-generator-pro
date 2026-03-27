@@ -615,25 +615,12 @@
       <!-- API Key Tab -->
       <div id="admin-tab-apikey" class="hidden space-y-6">
         <h1 class="text-2xl font-bold text-slate-800">Настройки API</h1>
-        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 max-w-2xl">
           <label class="block text-sm font-medium text-slate-700 mb-2">GigaChat API Key</label>
-          <div class="relative mb-4">
-            <input type="password" id="adminApiKeyInput" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none" placeholder="Введите ключ авторизации" readonly>
-            <button type="button" onclick="toggleApiKeyVisibility()" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors">
-              <svg id="eyeIcon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </button>
-          </div>
-          <div class="flex space-x-3" id="apiKeyActions">
-            <button onclick="editApiKey()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors">Редактировать</button>
-            <button onclick="deleteApiKey()" class="bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 px-6 rounded-xl transition-colors">Удалить</button>
-            <button onclick="testApiKey()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors ml-auto">Проверить подключение</button>
-          </div>
-          <div class="flex space-x-3 hidden" id="apiKeyEditActions">
+          <input type="password" id="adminApiKeyInput" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none mb-4" placeholder="Введите ключ авторизации">
+          <div class="flex space-x-3">
             <button onclick="saveAdminApiKey()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-xl transition-colors">Сохранить</button>
-            <button onclick="cancelEditApiKey()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors">Отмена</button>
+            <button onclick="testApiKey()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors">Проверить подключение</button>
           </div>
         </div>
       </div>
@@ -1029,74 +1016,66 @@
       btnGenerate.textContent = '⏳ Генерация...';
 
       try {
-        // Mocking GigaChat API call for demonstration since we don't have a real proxy setup
-        // In a real app, you would call your backend which calls GigaChat
-        log('INFO', `Используется API ключ: ${apiKey.substring(0, 5)}...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        window.currentBpmnData = {
-          elements: [
-            { id: 'StartEvent_1', name: 'Начало', type: 'startEvent', time_min: 0 },
-            { id: 'Task_1', name: 'Анализ документа', type: 'userTask', time_min: 15 },
-            { id: 'Task_2', name: 'Согласование', type: 'userTask', time_min: 30 },
-            { id: 'EndEvent_1', name: 'Конец', type: 'endEvent', time_min: 0 }
-          ],
-          flows: [
-            { id: 'Flow_1', from: 'StartEvent_1', to: 'Task_1' },
-            { id: 'Flow_2', from: 'Task_1', to: 'Task_2' },
-            { id: 'Flow_3', from: 'Task_2', to: 'EndEvent_1' }
-          ],
-          optimized: {
-            changes: [
-              { element_id: 'Task_2', action: 'automate', new_time_min: 5 }
-            ]
+        const gigaResponse = await fetch('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
           },
-          executive_summary: {
-            groups: [
-              { name: 'Инициация', time_min: 15, kpi: 'Без изменений' },
-              { name: 'Обработка', time_min: 5, kpi: 'Ускорено на 25 мин' }
-            ]
-          }
-        };
+          body: JSON.stringify({
+            model: 'GigaChat',
+            messages: [
+              { role: 'system', content: 'Ты эксперт по BPMN. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура: {"elements":[{"id":"s1","name":"Название (до 5 слов)","type":"startEvent|userTask|endEvent","time_min":0}],"flows":[{"id":"f1","from":"s1","to":"s2"}]}\n\nПравила: первый type=startEvent, последний type=endEvent, задачи type=userTask, названия на русском, time_min для задач обязательно.' },
+              { role: 'user', content: `Проанализируй бизнес-процесс и верни JSON:\n\n${textContent.slice(0, 6000)}` }
+            ],
+            temperature: 0.1,
+            max_tokens: 2000,
+          }),
+        });
 
-        const mockBpmn = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_1">
-  <bpmn:process id="Process_1" isExecutable="false">
-    <bpmn:startEvent id="StartEvent_1" name="Начало" />
-    <bpmn:task id="Task_1" name="Анализ документа" />
-    <bpmn:task id="Task_2" name="Согласование" />
-    <bpmn:endEvent id="EndEvent_1" name="Конец" />
-    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
-    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="Task_2" />
-    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_2" targetRef="EndEvent_1" />
-  </bpmn:process>
-</bpmn:definitions>`;
+        if (!gigaResponse.ok) throw new Error(`GigaChat ${gigaResponse.status}: ${await gigaResponse.text()}`);
+        const gigaData = await gigaResponse.json();
+        const gigaContent = gigaData.choices?.[0]?.message?.content ?? '';
+        const cleaned = gigaContent.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+        window.currentBpmnData = JSON.parse(cleaned);
 
-        xmlOutput.value = mockBpmn;
+        xmlOutput.value = generateDrawioXML(window.currentBpmnData);
         log('OK', 'BPMN успешно сгенерирован');
         
         // Update counters
+        const _tasks = window.currentBpmnData.elements.filter(e => e.type === 'userTask').length;
+        const _gateways = window.currentBpmnData.elements.filter(e => e.type.toLowerCase().includes('gateway')).length;
+        const _totalTime = window.currentBpmnData.elements.reduce((s, e) => s + (e.time_min || 0), 0);
         document.querySelector('.counters-row').innerHTML = `
-          <span class="badge">Задач: 2</span>
-          <span class="badge">Шлюзов: 0</span>
+          <span class="badge">Задач: ${_tasks}</span>
+          <span class="badge">Шлюзов: ${_gateways}</span>
           <span class="badge">Ролей: 1</span>
-          <span class="badge">Время: 45 мин</span>
+          <span class="badge">Время: ${_totalTime} мин</span>
         `;
 
         // Update Compare Tab
+        let _tobeTime = _totalTime;
+        if (window.currentBpmnData.optimized?.changes) {
+          window.currentBpmnData.optimized.changes.forEach(c => {
+            const el = window.currentBpmnData.elements.find(e => e.id === c.element_id);
+            if (el) _tobeTime = _tobeTime - (el.time_min || 0) + (c.new_time_min || 0);
+          });
+        }
+        const _savings = _totalTime - _tobeTime;
+        const _savingsPct = _totalTime > 0 ? Math.round(_savings / _totalTime * 100) : 0;
         document.querySelector('.compare-grid').innerHTML = `
           <div class="compare-block">
             <h3 class="danger-text">AS-IS (текущий)</h3>
-            <div class="time-counter">45 мин</div>
+            <div class="time-counter">${_totalTime} мин</div>
             <button class="btn-secondary" onclick="openInDrawIo('asis')">Открыть в draw.io</button>
           </div>
           <div class="compare-block">
             <h3 class="success-text">TO-BE (оптимизированный)</h3>
-            <div class="time-counter">20 мин</div>
+            <div class="time-counter">${_tobeTime} мин</div>
             <button class="btn-secondary" onclick="openInDrawIo('tobe')">Открыть в draw.io</button>
           </div>
         `;
-        document.querySelector('.savings-text').textContent = 'Экономия: 25 мин (55%)';
+        document.querySelector('.savings-text').textContent = `Экономия: ${_savings} мин (${_savingsPct}%)`;
 
         // Update Executive Tab
         updateExecutiveTab(window.currentBpmnData);
@@ -1490,64 +1469,15 @@
       activeBtn.classList.add('bg-blue-50', 'text-blue-700');
     }
 
-    window.saveAdminApiKey = function() {
+    function saveAdminApiKey() {
       const key = document.getElementById('adminApiKeyInput').value;
       const data = getAppData();
       data.apiKey = key;
       saveAppData(data);
       alert('API ключ сохранен');
-      
-      // Reset to view mode
-      document.getElementById('adminApiKeyInput').readOnly = true;
-      document.getElementById('adminApiKeyInput').classList.add('bg-slate-50');
-      document.getElementById('apiKeyActions').classList.remove('hidden');
-      document.getElementById('apiKeyEditActions').classList.add('hidden');
-    };
+    }
 
-    window.editApiKey = function() {
-      const input = document.getElementById('adminApiKeyInput');
-      input.readOnly = false;
-      input.classList.remove('bg-slate-50');
-      input.focus();
-      
-      document.getElementById('apiKeyActions').classList.add('hidden');
-      document.getElementById('apiKeyEditActions').classList.remove('hidden');
-    };
-
-    window.cancelEditApiKey = function() {
-      const data = getAppData();
-      const input = document.getElementById('adminApiKeyInput');
-      input.value = data.apiKey || '';
-      input.readOnly = true;
-      input.classList.add('bg-slate-50');
-      
-      document.getElementById('apiKeyActions').classList.remove('hidden');
-      document.getElementById('apiKeyEditActions').classList.add('hidden');
-    };
-
-    window.deleteApiKey = function() {
-      if(confirm('Вы уверены, что хотите удалить API ключ?')) {
-        const data = getAppData();
-        data.apiKey = '';
-        saveAppData(data);
-        document.getElementById('adminApiKeyInput').value = '';
-        alert('API ключ удален');
-      }
-    };
-
-    window.toggleApiKeyVisibility = function() {
-      const input = document.getElementById('adminApiKeyInput');
-      const icon = document.getElementById('eyeIcon');
-      if (input.type === 'password') {
-        input.type = 'text';
-        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />';
-      } else {
-        input.type = 'password';
-        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />';
-      }
-    };
-
-    window.testApiKey = async function() {
+    async function testApiKey() {
       const key = document.getElementById('adminApiKeyInput').value;
       if (!key) {
         alert('Введите API ключ для проверки');
@@ -1556,7 +1486,7 @@
       
       // Mocking API check
       alert('Проверка подключения... (Мок: Успешно)');
-    };
+    }
 
     function updateAdminDashboard() {
       const data = getAppData();
@@ -1598,23 +1528,18 @@
       `).join('');
     }
 
-    window.deleteUser = function(id) {
+    function deleteUser(id) {
       if(confirm('Удалить пользователя?')) {
         const data = getAppData();
-        const userToDelete = data.users.find(u => String(u.id) === String(id));
-        if (!userToDelete) {
-          alert('Пользователь не найден');
-          return;
-        }
-        if(userToDelete.role === 'admin' && data.users.filter(u => u.role === 'admin').length === 1) {
+        if(data.users.find(u => u.id === id).role === 'admin' && data.users.filter(u => u.role === 'admin').length === 1) {
           alert('Нельзя удалить последнего администратора');
           return;
         }
-        data.users = data.users.filter(u => String(u.id) !== String(id));
+        data.users = data.users.filter(u => u.id !== id);
         saveAppData(data);
         updateAdminDashboard();
       }
-    };
+    }
 
     function openAddUserModal() {
       document.getElementById('addUserModal').classList.remove('hidden');
@@ -1650,7 +1575,7 @@
 
       const session = getSession();
       const data = getAppData();
-      const userIndex = data.users.findIndex(u => String(u.id) === String(session.id));
+      const userIndex = data.users.findIndex(u => u.id === session.id);
       
       if (data.users[userIndex].password !== currentPass) {
         errorEl.textContent = 'Неверный текущий пароль';
