@@ -6,10 +6,10 @@ meta:
 build:
   skip: false
   additionalCommands:
-    - npm install
+    - npm ci
     - npm run build
 run:
   command: npx serve -s dist -l 80
   persistenceMount: /data
   containerPort: "80"
-  servicePort: 80 
+  servicePort: 80
