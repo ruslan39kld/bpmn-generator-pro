@@ -9,7 +9,7 @@ build:
     - npm ci
     - npm run build
 run:
-  command: npx serve -s dist -l 80
+  command:  node server.js
   persistenceMount: /data
   containerPort: "80"
   servicePort: 80
