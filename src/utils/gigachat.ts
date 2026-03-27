@@ -1,13 +1,17 @@
-import { BpmnStep } from './buildDrawioUrl'
+import { BpmnStep } from './buildDrawioXml'
 
 const GIGACHAT_API = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions'
 
-export async function generateBpmn(
+export interface GenerateOptions {
+  swimlanes: boolean
+  compact: boolean
+}
+
+export async function callGigaChat(
   text: string,
   apiKey: string,
-  options: { swimlanes: boolean; compact: boolean }
+  options: GenerateOptions
 ): Promise<{ steps: BpmnStep[]; roles: string[] }> {
-
   const systemPrompt = `Ты эксперт по бизнес-процессам и BPMN 2.0.
 Верни ТОЛЬКО валидный JSON без markdown и без пояснений.
 
@@ -38,18 +42,27 @@ ${options.compact ? '- Максимум 8 шагов, только ключев�
       model: 'GigaChat',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Проанализируй и верни JSON:\n\n${text.slice(0, 8000)}` }
+        { role: 'user', content: `Проанализируй и верни JSON:\n\n${text.slice(0, 8000)}` },
       ],
       temperature: 0.1,
       max_tokens: 2000,
-    })
+    }),
   })
 
-  if (!response.ok) throw new Error(`GigaChat error ${response.status}: ${await response.text()}`)
+  if (!response.ok) {
+    throw new Error(`GigaChat error ${response.status}: ${await response.text()}`)
+  }
 
   const data = await response.json()
-  const content = data.choices?.[0]?.message?.content || ''
+  const content: string = data.choices?.[0]?.message?.content ?? ''
   const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
   const parsed = JSON.parse(cleaned)
-  return { steps: parsed.steps || [], roles: parsed.roles || [] }
+
+  return {
+    steps: (parsed.steps ?? []) as BpmnStep[],
+    roles: (parsed.roles ?? []) as string[],
+  }
 }
+
+// alias expected by App.tsx
+export const generateBpmn = callGigaChat
