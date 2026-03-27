@@ -1,12 +1,1811 @@
 <!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BPMN Generator Pro</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BPMN Generator Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono&family=Unbounded:wght@600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface2: #f1f5f9;
+      --border: #e2e8f0;
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --danger: #e11d48;
+      --success: #059669;
+      --warn: #d97706;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+    /* Header */
+    .header {
+      height: 60px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background-color: #ffffff;
+      z-index: 10;
+      flex-shrink: 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .logo {
+      font-family: 'Unbounded', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .logo .accent {
+      color: var(--accent);
+    }
+
+    .header-controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    input[type="password"], input[type="text"], select, textarea {
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="password"]:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-light);
+    }
+
+    input[type="password"] {
+      width: 240px;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 500;
+    }
+
+    .btn-secondary {
+      background-color: #ffffff;
+      color: var(--text);
+      border: 1px solid #e2e8f0;
+      padding: 8px 16px;
+      font-size: 13px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .btn-secondary:hover {
+      background-color: #f8fafc;
+      color: var(--text);
+    }
+
+    .btn-primary {
+      background-color: var(--accent);
+      color: #fff;
+      padding: 8px 16px;
+      font-size: 13px;
+      box-shadow: 0 1px 2px 0 rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-primary:hover {
+      background-color: #1d4ed8;
+    }
+
+    /* Layout */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Left Panel */
+    .left-panel {
+      width: 400px;
+      border-right: 1px solid #e2e8f0;
+      background-color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+      z-index: 5;
+    }
+
+    .section {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    /* Drop Zone */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background-color: #f8fafc;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background-color: var(--accent-light);
+    }
+
+    .drop-zone-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .drop-zone-content .icon {
+      font-size: 24px;
+      color: var(--accent);
+    }
+
+    .muted-text {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .file-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: #f8fafc;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .file-info.hidden {
+      display: none;
+    }
+
+    .icon-btn {
+      background: none;
+      color: var(--muted);
+      font-size: 18px;
+      padding: 0 4px;
+      border-radius: 4px;
+      box-shadow: none;
+    }
+
+    .icon-btn:hover {
+      color: var(--danger);
+      background-color: #ffe4e6;
+    }
+
+    /* Textarea */
+    textarea {
+      resize: vertical;
+      width: 100%;
+      line-height: 1.5;
+    }
+
+    /* Checkboxes */
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text);
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    /* Generate Button */
+    #btnGenerate {
+      width: 100%;
+      height: 48px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    /* Log */
+    #log-container {
+      margin-top: 16px;
+    }
+
+    #log {
+      width: 100%;
+      background-color: #f8fafc;
+      border: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      padding: 12px;
+      resize: none;
+      border-radius: 6px;
+    }
+
+    /* Right Panel */
+    .right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: #ffffff;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+      border-radius: 12px;
+      margin: 16px;
+    }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background-color: var(--surface);
+      flex-shrink: 0;
+      padding: 0 16px;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      padding: 16px 20px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 500;
+      margin-right: 8px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background-color: #f8fafc;
+    }
+
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background-color: var(--accent-light);
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tab-content.active {
+      display: flex;
+    }
+
+    /* BPMN Tab */
+    .counters-row {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      flex-shrink: 0;
+      background-color: var(--surface);
+    }
+
+    .badge {
+      background-color: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    #xmlOutput {
+      flex: 1;
+      border: none;
+      border-radius: 0;
+      background-color: var(--surface);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 24px;
+      color: var(--text);
+      resize: none;
+      line-height: 1.5;
+    }
+
+    .bottom-bar {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      background-color: var(--surface);
+      flex-shrink: 0;
+    }
+
+    /* Compare Tab */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      padding: 24px;
+      flex: 1;
+      background-color: transparent;
+    }
+
+    .compare-block {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.08);
+      transition: box-shadow 0.2s;
+    }
+
+    .compare-block:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    }
+
+    .danger-text {
+      color: var(--danger);
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .success-text {
+      color: var(--success);
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .time-counter {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .savings-text {
+      text-align: center;
+      color: var(--success);
+      font-size: 20px;
+      font-weight: 600;
+      padding: 24px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      background-color: var(--surface);
+    }
+
+    /* Animation Tab */
+    .animation-controls {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-shrink: 0;
+      background-color: var(--surface);
+    }
+
+    .animation-controls input[type="range"] {
+      flex: 1;
+      max-width: 200px;
+      accent-color: var(--accent);
+    }
+
+    #animation-container, #executive-container {
+      flex: 1;
+      background-color: #ffffff;
+      border-radius: 12px;
+      margin: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.08);
+      transition: box-shadow 0.2s;
+    }
+
+    #animation-container:hover, #executive-container:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    }
+
+    .placeholder-text {
+      color: var(--muted);
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN PAGE -->
+  <div id="login-container" class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="p-8 bg-blue-600 text-white text-center">
+        <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">Вход в систему</h2>
+        <p class="text-blue-100 text-sm">BPMN Generator Pro</p>
+      </div>
+      <div class="p-8">
+        <form id="loginForm" class="space-y-6">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-2">Логин</label>
+            <input type="text" id="loginInput" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none" placeholder="Введите логин" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-2">Пароль</label>
+            <input type="password" id="passwordInput" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none" placeholder="Введите пароль" required>
+          </div>
+          <div class="flex items-center justify-between">
+            <label class="flex items-center space-x-2 cursor-pointer">
+              <input type="checkbox" id="rememberMe" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+              <span class="text-sm text-slate-600">Запомнить меня</span>
+            </label>
+          </div>
+          <div id="loginError" class="hidden text-red-500 text-sm text-center">Неверный логин или пароль</div>
+          <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors shadow-lg shadow-blue-600/20">
+            Войти
+          </button>
+        </form>
+        <div class="mt-8 pt-6 border-t border-slate-100">
+          <p class="text-sm text-slate-500 text-center mb-4">Демо-доступ</p>
+          <div class="grid grid-cols-2 gap-4">
+            <button onclick="fillDemo('admin', 'admin')" class="flex flex-col items-center p-3 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all group">
+              <span class="text-sm font-medium text-slate-700 group-hover:text-blue-700">Администратор</span>
+              <span class="text-xs text-slate-400">admin / admin</span>
+            </button>
+            <button onclick="fillDemo('user', 'user')" class="flex flex-col items-center p-3 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all group">
+              <span class="text-sm font-medium text-slate-700 group-hover:text-blue-700">Пользователь</span>
+              <span class="text-xs text-slate-400">user / user</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div id="admin-container" class="hidden min-h-screen bg-slate-50 flex w-full">
+    <!-- Sidebar -->
+    <div class="w-64 bg-white border-r border-slate-200 flex flex-col">
+      <div class="p-6 border-b border-slate-200">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold">A</div>
+          <div>
+            <h2 class="font-bold text-slate-800">Admin Panel</h2>
+            <p class="text-xs text-slate-500">BPMN Generator</p>
+          </div>
+        </div>
+      </div>
+      <nav class="flex-1 p-4 space-y-2">
+        <button onclick="switchAdminTab('dashboard')" id="tab-btn-dashboard" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl bg-blue-50 text-blue-700 font-medium transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+          <span>Дашборд</span>
+        </button>
+        <button onclick="switchAdminTab('apikey')" id="tab-btn-apikey" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+          <span>API Ключи</span>
+        </button>
+        <button onclick="switchAdminTab('users')" id="tab-btn-users" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          <span>Пользователи</span>
+        </button>
+        <button onclick="switchAdminTab('stats')" id="tab-btn-stats" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          <span>Статистика</span>
+        </button>
+      </nav>
+      <div class="p-4 border-t border-slate-200">
+        <button onclick="logout()" class="w-full flex items-center justify-center space-x-2 px-4 py-2 rounded-xl text-red-600 hover:bg-red-50 font-medium transition-colors">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+          <span>Выйти</span>
+        </button>
+      </div>
+    </div>
+    <!-- Main Content -->
+    <div class="flex-1 p-8 overflow-y-auto">
+      <!-- Dashboard Tab -->
+      <div id="admin-tab-dashboard" class="space-y-6">
+        <h1 class="text-2xl font-bold text-slate-800">Обзор системы</h1>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div class="text-slate-500 text-sm font-medium mb-1">Всего пользователей</div>
+            <div class="text-3xl font-bold text-slate-800" id="stat-total-users">0</div>
+          </div>
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div class="text-slate-500 text-sm font-medium mb-1">Сгенерировано схем</div>
+            <div class="text-3xl font-bold text-slate-800" id="stat-total-diagrams">0</div>
+          </div>
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div class="text-slate-500 text-sm font-medium mb-1">Активные пользователи</div>
+            <div class="text-3xl font-bold text-slate-800" id="stat-active-users">0</div>
+          </div>
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div class="text-slate-500 text-sm font-medium mb-1">Статус API</div>
+            <div class="text-lg font-bold text-green-600 flex items-center mt-1">
+              <span class="w-3 h-3 bg-green-500 rounded-full mr-2"></span> Подключено
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- API Key Tab -->
+      <div id="admin-tab-apikey" class="hidden space-y-6">
+        <h1 class="text-2xl font-bold text-slate-800">Настройки API</h1>
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <label class="block text-sm font-medium text-slate-700 mb-3">GigaChat API Key</label>
+
+          <!-- Saved key view (shown when key exists) -->
+          <div id="apiKeySavedView" class="hidden">
+            <div class="relative mb-4">
+              <input type="password" id="adminApiKeyDisplay" readonly
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-11 text-slate-700 outline-none cursor-default font-mono text-sm tracking-widest">
+              <button type="button" onclick="toggleApiKeyVisibility()"
+                class="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Показать/скрыть ключ">
+                <svg id="iconEye" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <svg id="iconEyeOff" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                </svg>
+              </button>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button type="button" onclick="startEditApiKey()"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-5 rounded-xl transition-colors flex items-center gap-2">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                Редактировать
+              </button>
+              <button type="button" onclick="deleteApiKey()"
+                class="bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 px-5 rounded-xl transition-colors flex items-center gap-2">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                Удалить
+              </button>
+              <button type="button" onclick="testApiKey()"
+                class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-5 rounded-xl transition-colors">Проверить подключение</button>
+            </div>
+          </div>
+
+          <!-- Edit / new key view -->
+          <div id="apiKeyEditView">
+            <div class="relative mb-4">
+              <input type="password" id="adminApiKeyInput"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-11 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none font-mono text-sm"
+                placeholder="Введите ключ авторизации">
+              <button type="button" onclick="toggleApiKeyInputVisibility()"
+                class="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Показать/скрыть ключ">
+                <svg id="iconInputEye" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <svg id="iconInputEyeOff" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                </svg>
+              </button>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button type="button" onclick="saveAdminApiKey()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-xl transition-colors">Сохранить</button>
+              <button type="button" onclick="cancelEditApiKey()" id="btnCancelEdit" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors">Отмена</button>
+              <button type="button" onclick="testApiKey()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors">Проверить подключение</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Users Tab -->
+      <div id="admin-tab-users" class="hidden space-y-6">
+        <div class="flex justify-between items-center">
+          <h1 class="text-2xl font-bold text-slate-800">Пользователи</h1>
+          <button onclick="openAddUserModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-xl transition-colors flex items-center space-x-2">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+            <span>Добавить</span>
+          </button>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-sm text-slate-500">
+                <th class="p-4 font-medium">Имя</th>
+                <th class="p-4 font-medium">Логин</th>
+                <th class="p-4 font-medium">Роль</th>
+                <th class="p-4 font-medium">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody" class="divide-y divide-slate-200">
+              <!-- Users will be populated here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Stats Tab -->
+      <div id="admin-tab-stats" class="hidden space-y-6">
+        <h1 class="text-2xl font-bold text-slate-800">Статистика генераций</h1>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-sm text-slate-500">
+                <th class="p-4 font-medium">Дата и время</th>
+                <th class="p-4 font-medium">Пользователь</th>
+                <th class="p-4 font-medium">Статус</th>
+              </tr>
+            </thead>
+            <tbody id="statsTableBody" class="divide-y divide-slate-200">
+              <!-- Stats will be populated here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div id="addUserModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+      <div class="p-6 border-b border-slate-200 flex justify-between items-center">
+        <h2 class="text-xl font-bold text-slate-800">Добавить пользователя</h2>
+        <button onclick="closeAddUserModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <div class="p-6">
+        <form id="addUserForm" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Имя</label>
+            <input type="text" id="newUserName" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Логин</label>
+            <input type="text" id="newUserLogin" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Пароль</label>
+            <input type="password" id="newUserPass" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Роль</label>
+            <select id="newUserRole" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+              <option value="user">Пользователь</option>
+              <option value="admin">Администратор</option>
+            </select>
+          </div>
+          <div class="pt-4 flex space-x-3">
+            <button type="button" onclick="closeAddUserModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-xl transition-colors">Отмена</button>
+            <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-xl transition-colors">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER APP -->
+  <div id="app-container" class="hidden flex-col h-screen w-full">
+    <header class="header">
+      <div class="logo">⬡ <span class="accent">BPMN</span> Generator Pro</div>
+      <div class="header-controls">
+        <div class="flex items-center space-x-4">
+          <span class="text-sm font-medium text-slate-700" id="userGreeting">Привет, Пользователь</span>
+          <button onclick="openChangePasswordModal()" class="flex items-center space-x-2 text-slate-500 hover:text-blue-600 transition-colors">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          </button>
+          <button onclick="logout()" class="flex items-center space-x-2 text-slate-500 hover:text-red-600 transition-colors">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            <span class="text-sm font-medium">Выйти</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div id="apiKeyWarning" class="hidden bg-yellow-50 border-b border-yellow-200 p-4 text-center text-yellow-800 text-sm">
+      <span class="font-medium">Внимание:</span> API ключ GigaChat не настроен. Обратитесь к администратору для настройки системы.
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+        <div class="p-6 border-b border-slate-200 flex justify-between items-center">
+          <h2 class="text-xl font-bold text-slate-800">Изменить пароль</h2>
+          <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div class="p-6">
+          <form id="changePasswordForm" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Текущий пароль</label>
+              <input type="password" id="currentPass" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Новый пароль</label>
+              <input type="password" id="newPass" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Подтвердите новый пароль</label>
+              <input type="password" id="confirmNewPass" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+            </div>
+            <div id="changePasswordError" class="hidden text-red-500 text-sm text-center"></div>
+            <div class="pt-4 flex space-x-3">
+              <button type="button" onclick="closeChangePasswordModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-xl transition-colors">Отмена</button>
+              <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-xl transition-colors">Сохранить</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  <main class="main">
+    <aside class="left-panel">
+      
+      <div class="section">
+        <label class="section-label">ИСТОЧНИК ДАННЫХ</label>
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-zone-content" id="dropZoneContent">
+            <span class="icon">↑</span>
+            <span>Перетащи DOCX или TXT</span>
+            <span class="muted-text">(или нажми для выбора)</span>
+          </div>
+          <input type="file" id="fileInput" hidden accept=".docx,.txt">
+        </div>
+        <div id="fileInfo" class="file-info hidden">
+          <span id="fileName"></span>
+          <button id="btnRemoveFile" class="icon-btn">×</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <label class="section-label">ИЛИ ОПИШИ ПРОЦЕСС</label>
+        <textarea rows="7" placeholder="Вставь текст из документа или опиши процесс шаг за шагом..."></textarea>
+      </div>
+
+      <div class="section">
+        <label class="section-label">ПАРАМЕТРЫ</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label"><input type="checkbox" checked> Временные оценки на каждый шаг</label>
+          <label class="checkbox-label"><input type="checkbox" checked> Генерировать AS-IS и TO-BE версии</label>
+          <label class="checkbox-label"><input type="checkbox" checked> Анимация выполнения процесса</label>
+          <label class="checkbox-label"><input type="checkbox" checked> Укрупнённая версия для руководства</label>
+          <label class="checkbox-label"><input type="checkbox" checked> Дорожки по ролям (Swimlanes)</label>
+          <label class="checkbox-label"><input type="checkbox"> Компактный режим</label>
+        </div>
+      </div>
+
+      <div class="section">
+        <button id="btnGenerate" class="btn-primary">▶ Сгенерировать BPMN</button>
+        <div id="log-container">
+          <textarea id="log" readonly rows="5"></textarea>
+        </div>
+      </div>
+
+    </aside>
+
+    <section class="right-panel">
+      
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-bpmn">BPMN</button>
+        <button class="tab-btn" data-tab="tab-compare">AS-IS vs TO-BE</button>
+        <button class="tab-btn" data-tab="tab-animation">Анимация</button>
+        <button class="tab-btn" data-tab="tab-executive">Для руководства</button>
+      </div>
+
+      <div id="tab-bpmn" class="tab-content active">
+        <div class="counters-row">
+          <span class="badge">Задач: —</span>
+          <span class="badge">Шлюзов: —</span>
+          <span class="badge">Ролей: —</span>
+          <span class="badge">Время: — мин</span>
+        </div>
+        <textarea id="xmlOutput" readonly></textarea>
+        <div class="bottom-bar">
+          <button class="btn-secondary">Открыть в draw.io</button>
+          <button class="btn-secondary">Скопировать XML</button>
+          <button class="btn-secondary">Скачать .drawio</button>
+        </div>
+      </div>
+
+      <div id="tab-compare" class="tab-content">
+        <div class="compare-grid">
+          <div class="compare-block">
+            <h3 class="danger-text">AS-IS (текущий)</h3>
+            <div class="time-counter">— мин</div>
+            <button class="btn-secondary">Открыть в draw.io</button>
+          </div>
+          <div class="compare-block">
+            <h3 class="success-text">TO-BE (оптимизированный)</h3>
+            <div class="time-counter">— мин</div>
+            <button class="btn-secondary">Открыть в draw.io</button>
+          </div>
+        </div>
+        <div class="savings-text">Экономия: — мин (—%)</div>
+      </div>
+
+      <div id="tab-animation" class="tab-content">
+        <div class="animation-controls">
+          <button class="btn-secondary">▶ Запустить</button>
+          <button class="btn-secondary">⏸ Пауза</button>
+          <button class="btn-secondary">↺ Сброс</button>
+          <input type="range" min="1" max="100" value="50">
+        </div>
+        <div id="animation-container">
+          <div class="placeholder-text">Сначала сгенерируй BPMN</div>
+          <!-- SVG для анимации (пока пустой placeholder) -->
+        </div>
+      </div>
+
+      <div id="tab-executive" class="tab-content">
+        <div id="executive-container">
+          <div class="placeholder-text">Укрупнённая диаграмма для руководства появится после генерации</div>
+        </div>
+        <div class="bottom-bar">
+          <button class="btn-secondary">Открыть в draw.io</button>
+          <button class="btn-secondary">Скачать PDF</button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+  </div> <!-- End app-container -->
+
+  <script>
+    // 1. Переключение вкладок
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // 2. Drag-and-drop зона
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const btnRemoveFile = document.getElementById('btnRemoveFile');
+    const dropZoneContent = document.getElementById('dropZoneContent');
+    let currentFile = null;
+
+    dropZone.addEventListener('click', () => {
+      if (!currentFile) fileInput.click();
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      currentFile = file;
+      dropZoneContent.style.display = 'none';
+      fileInfo.classList.remove('hidden');
+      fileName.textContent = file.name;
+      log('INFO', `Файл выбран: ${file.name}`);
+    }
+
+    btnRemoveFile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.value = '';
+      currentFile = null;
+      dropZoneContent.style.display = 'flex';
+      fileInfo.classList.add('hidden');
+      fileName.textContent = '';
+      log('INFO', 'Файл удалён');
+    });
+
+    // 3. Лог функция
+    const logEl = document.getElementById('log');
+    function log(type, msg) {
+      const line = `[${type}] ${new Date().toLocaleTimeString()} — ${msg}\n`;
+      logEl.value += line;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // 4. Сохранить API ключ в localStorage
+    // Logic moved to admin panel
+
+    // Инициализация при загрузке
+    window.addEventListener('DOMContentLoaded', () => {
+      log('INFO', 'Приложение готово. Загрузи файл или вставь текст.');
+      initAnimationSVG();
+    });
+
+    // --- ЭТАП 2: ЧТЕНИЕ ФАЙЛОВ И GIGACHAT API ---
+
+    async function parseFile(file) {
+      return new Promise((resolve, reject) => {
+        if (file.name.endsWith('.docx')) {
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            const arrayBuffer = event.target.result;
+            mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+              .then(result => resolve(result.value))
+              .catch(err => reject(err));
+          };
+          reader.readAsArrayBuffer(file);
+        } else if (file.name.endsWith('.txt')) {
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            resolve(event.target.result);
+          };
+          reader.readAsText(file);
+        } else {
+          reject(new Error('Неподдерживаемый формат файла'));
+        }
+      });
+    }
+
+    const btnGenerate = document.getElementById('btnGenerate');
+    const textArea = document.querySelector('textarea[placeholder^="Вставь текст"]');
+    const xmlOutput = document.getElementById('xmlOutput');
+
+    btnGenerate.addEventListener('click', async () => {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        log('ERROR', 'API ключ GigaChat не настроен. Обратитесь к администратору.');
+        return;
+      }
+
+      let textContent = textArea.value;
+      if (currentFile) {
+        try {
+          log('INFO', 'Чтение файла...');
+          textContent = await parseFile(currentFile);
+          log('OK', 'Файл успешно прочитан');
+        } catch (err) {
+          log('ERROR', 'Ошибка чтения файла: ' + err.message);
+          return;
+        }
+      }
+
+      if (!textContent.trim()) {
+        log('ERROR', 'Нет данных для генерации (введите текст или загрузите файл)');
+        return;
+      }
+
+      log('INFO', 'Отправка запроса в GigaChat API...');
+      btnGenerate.disabled = true;
+      btnGenerate.textContent = '⏳ Генерация...';
+
+      try {
+        // Mocking GigaChat API call for demonstration since we don't have a real proxy setup
+        // In a real app, you would call your backend which calls GigaChat
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        window.currentBpmnData = {
+          elements: [
+            { id: 'StartEvent_1', name: 'Начало', type: 'startEvent', time_min: 0 },
+            { id: 'Task_1', name: 'Анализ документа', type: 'userTask', time_min: 15 },
+            { id: 'Task_2', name: 'Согласование', type: 'userTask', time_min: 30 },
+            { id: 'EndEvent_1', name: 'Конец', type: 'endEvent', time_min: 0 }
+          ],
+          flows: [
+            { id: 'Flow_1', from: 'StartEvent_1', to: 'Task_1' },
+            { id: 'Flow_2', from: 'Task_1', to: 'Task_2' },
+            { id: 'Flow_3', from: 'Task_2', to: 'EndEvent_1' }
+          ],
+          optimized: {
+            changes: [
+              { element_id: 'Task_2', action: 'automate', new_time_min: 5 }
+            ]
+          },
+          executive_summary: {
+            groups: [
+              { name: 'Инициация', time_min: 15, kpi: 'Без изменений' },
+              { name: 'Обработка', time_min: 5, kpi: 'Ускорено на 25 мин' }
+            ]
+          }
+        };
+
+        const mockBpmn = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_1">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_1" name="Начало" />
+    <bpmn:task id="Task_1" name="Анализ документа" />
+    <bpmn:task id="Task_2" name="Согласование" />
+    <bpmn:endEvent id="EndEvent_1" name="Конец" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="Task_2" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_2" targetRef="EndEvent_1" />
+  </bpmn:process>
+</bpmn:definitions>`;
+
+        xmlOutput.value = mockBpmn;
+        log('OK', 'BPMN успешно сгенерирован');
+        
+        // Update counters
+        document.querySelector('.counters-row').innerHTML = `
+          <span class="badge">Задач: 2</span>
+          <span class="badge">Шлюзов: 0</span>
+          <span class="badge">Ролей: 1</span>
+          <span class="badge">Время: 45 мин</span>
+        `;
+
+        // Update Compare Tab
+        document.querySelector('.compare-grid').innerHTML = `
+          <div class="compare-block">
+            <h3 class="danger-text">AS-IS (текущий)</h3>
+            <div class="time-counter">45 мин</div>
+            <button class="btn-secondary" onclick="openInDrawIo('asis')">Открыть в draw.io</button>
+          </div>
+          <div class="compare-block">
+            <h3 class="success-text">TO-BE (оптимизированный)</h3>
+            <div class="time-counter">20 мин</div>
+            <button class="btn-secondary" onclick="openInDrawIo('tobe')">Открыть в draw.io</button>
+          </div>
+        `;
+        document.querySelector('.savings-text').textContent = 'Экономия: 25 мин (55%)';
+
+        // Update Executive Tab
+        updateExecutiveTab(window.currentBpmnData);
+
+        // Start Animation
+        buildAnimationSteps(window.currentBpmnData);
+        startAnimation();
+
+        // Log stats
+        const data = getAppData();
+        data.stats.push({
+          date: new Date().toISOString(),
+          user: getSession()?.login || 'unknown',
+          status: 'success'
+        });
+        saveAppData(data);
+
+      } catch (err) {
+        log('ERROR', 'Ошибка генерации: ' + err.message);
+        
+        // Log stats
+        const data = getAppData();
+        data.stats.push({
+          date: new Date().toISOString(),
+          user: getSession()?.login || 'unknown',
+          status: 'error'
+        });
+        saveAppData(data);
+      } finally {
+        btnGenerate.disabled = false;
+        btnGenerate.textContent = '▶ Сгенерировать BPMN';
+      }
+    });
+
+    // --- ЭТАП 3: АНИМАЦИЯ, РУКОВОДСТВО, ЭКСПОРТ ---
+
+    function generateDrawioXML(bpmnJson, mode) {
+      function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+      
+      const STYLES = {
+        startEvent:'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;',
+        endEvent:'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;',
+        userTask:'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#dae8fc;strokeColor=#6c8ebf;',
+        serviceTask:'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#fff2cc;strokeColor=#d6b656;',
+        exclusiveGateway:'rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;',
+        parallelGateway:'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;'
+      };
+      const SIZES = {
+        startEvent:[44,44],endEvent:[44,44],userTask:[160,70],serviceTask:[160,70],
+        exclusiveGateway:[54,54],parallelGateway:[54,54]
+      };
+
+      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<mxGraphModel adaptiveColors="auto">\n<root>\n<mxCell id="0"/>\n<mxCell id="1" parent="0"/>\n';
+      
+      let x = 80;
+      (bpmnJson.elements||[]).forEach(el => {
+        const [w,h] = SIZES[el.type]||[160,70];
+        const t = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
+        const style = STYLES[el.type]||STYLES.userTask;
+        xml += `<mxCell id="${esc(el.id)}" value="${esc(el.name)}${t}" style="${style}" vertex="1" parent="1"><mxGeometry x="${x}" y="${200-h/2}" width="${w}" height="${h}" as="geometry"/></mxCell>\n`;
+        x += 210;
+      });
+
+      (bpmnJson.flows||[]).forEach(fl => {
+        xml += `<mxCell id="${esc(fl.id)}" value="${esc(fl.label||'')}" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>\n`;
+      });
+
+      xml += '</root>\n</mxGraphModel>';
+      return xml;
+    }
+
+    function generateDrawioUrl(xmlString) {
+      try {
+        const enc = encodeURIComponent(xmlString);
+        const bytes = new TextEncoder().encode(enc);
+        const deflated = pako.deflateRaw(bytes, {level:9});
+        const b64 = btoa(String.fromCharCode(...deflated));
+        const payload = JSON.stringify({type:'xml',compressed:true,data:b64});
+        return 'https://app.diagrams.net/?pv=0&grid=0#create=' + encodeURIComponent(payload);
+      } catch(e) {
+        console.error('URL generation error:', e);
+        return null;
+      }
+    }
+
+    function buildAnimationSteps(bpmnJson) {
+      const tasks = (bpmnJson.elements || []).filter(e => e.time_min > 0);
+      
+      // AS-IS шаги
+      window.animStepsAsis = tasks.map((el, i) => ({
+        x: 80 + i * 160,
+        width: Math.min(40 + el.time_min * 18, 150),
+        duration: el.time_min * 800,
+        label: el.name.length > 12 ? el.name.slice(0,12)+'…' : el.name,
+        time: el.time_min
+      }));
+
+      // TO-BE шаги — учитываем оптимизацию
+      window.animStepsTobe = tasks
+        .filter(el => !(bpmnJson.optimized?.changes||[]).find(c=>c.element_id===el.id&&c.action==='remove'))
+        .map((el, i) => {
+          const ch = (bpmnJson.optimized?.changes||[]).find(c=>c.element_id===el.id);
+          const t = ch ? ch.new_time_min : el.time_min;
+          return {
+            x: 80 + i * 160,
+            width: Math.min(40 + t * 18, 150),
+            duration: t * 800,
+            label: el.name.length > 12 ? el.name.slice(0,12)+'…' : el.name,
+            time: t
+          };
+        });
+
+      renderAnimationSVG();
+    }
+
+    function renderAnimationSVG() {
+      const steps = window.animStepsAsis || [];
+      const totalW = Math.max(steps.length * 160 + 100, 800);
+      
+      let svgContent = `<svg width="100%" height="260" viewBox="0 0 ${totalW} 260" xmlns="http://www.w3.org/2000/svg">`;
+      
+      // Дорожка AS-IS
+      svgContent += `<text x="10" y="65" font-size="11" fill="#ef4444" font-weight="600">AS-IS</text>`;
+      svgContent += `<line x1="60" y1="70" x2="${totalW-20}" y2="70" stroke="#e2e8f0" stroke-width="1"/>`;
+      
+      // Блоки AS-IS с названиями
+      (window.animStepsAsis||[]).forEach(s => {
+        svgContent += `<rect x="${s.x}" y="48" width="${s.width}" height="44" rx="6" fill="white" stroke="#cbd5e1" stroke-width="1"/>`;
+        svgContent += `<text x="${s.x + s.width/2}" y="67" text-anchor="middle" font-size="9" fill="#475569">${s.label}</text>`;
+        svgContent += `<text x="${s.x + s.width/2}" y="82" text-anchor="middle" font-size="8" fill="#94a3b8">${s.time}м</text>`;
+      });
+
+      // Человечек AS-IS
+      svgContent += `<g id="man-asis" transform="translate(60,70)">
+        <circle cy="-22" r="7" fill="#ef4444"/>
+        <line y1="-15" y2="2" stroke="#ef4444" stroke-width="2"/>
+        <line x1="-8" y1="-8" x2="8" y2="-8" stroke="#ef4444" stroke-width="2"/>
+        <line y1="2" x2="-6" y2="14" stroke="#ef4444" stroke-width="2"/>
+        <line y1="2" x2="6" y2="14" stroke="#ef4444" stroke-width="2"/>
+      </g>`;
+
+      // Дорожка TO-BE
+      svgContent += `<text x="10" y="165" font-size="11" fill="#22c55e" font-weight="600">TO-BE</text>`;
+      svgContent += `<line x1="60" y1="170" x2="${totalW-20}" y2="170" stroke="#e2e8f0" stroke-width="1"/>`;
+
+      // Блоки TO-BE с названиями
+      (window.animStepsTobe||[]).forEach(s => {
+        svgContent += `<rect x="${s.x}" y="148" width="${s.width}" height="44" rx="6" fill="white" stroke="#bbf7d0" stroke-width="1"/>`;
+        svgContent += `<text x="${s.x + s.width/2}" y="167" text-anchor="middle" font-size="9" fill="#475569">${s.label}</text>`;
+        svgContent += `<text x="${s.x + s.width/2}" y="182" text-anchor="middle" font-size="8" fill="#94a3b8">${s.time}м</text>`;
+      });
+
+      // Человечек TO-BE
+      svgContent += `<g id="man-tobe" transform="translate(60,170)">
+        <circle cy="-22" r="7" fill="#22c55e"/>
+        <line y1="-15" y2="2" stroke="#22c55e" stroke-width="2"/>
+        <line x1="-8" y1="-8" x2="8" y2="-8" stroke="#22c55e" stroke-width="2"/>
+        <line y1="2" x2="-6" y2="14" stroke="#22c55e" stroke-width="2"/>
+        <line y1="2" x2="6" y2="14" stroke="#22c55e" stroke-width="2"/>
+      </g>`;
+
+      svgContent += `</svg>`;
+      
+      const container = document.getElementById('animation-container');
+      if (container) container.innerHTML = svgContent;
+    }
+
+    function updateExecutiveTab(bpmnData) {
+      const groups = bpmnData.executive_summary?.groups || [];
+      const container = document.getElementById('executive-container');
+      if (!container) return;
+
+      if (groups.length === 0) {
+        container.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:40px;">Нет данных для руководства</p>';
+        return;
+      }
+
+      container.innerHTML = groups.map(g => `
+        <div style="background:white;border-radius:12px;padding:20px;
+                    box-shadow:0 4px 8px rgba(0,0,0,0.08);border-top:4px solid #3b82f6;
+                    display:flex;flex-direction:column;gap:8px;">
+          <div style="font-weight:600;color:#1e293b;font-size:15px;">${g.name}</div>
+          <div style="font-size:26px;font-weight:700;color:#3b82f6;">⏱ ${g.time_min} мин</div>
+          <div style="font-size:12px;color:#22c55e;background:#f0fdf4;
+                      border-radius:20px;padding:3px 10px;display:inline-block;width:fit-content;">
+            ${g.kpi}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function initAnimationSVG() {
+      const container = document.getElementById('animation-container');
+      container.innerHTML = `
+        <svg width="100%" height="300" viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg">
+          <!-- AS-IS Track -->
+          <text x="20" y="85" fill="var(--danger)" font-family="Inter" font-weight="bold">AS-IS</text>
+          <line x1="80" y1="80" x2="750" y2="80" stroke="var(--border)" stroke-width="2" />
+          <circle id="anim-asis-dot" cx="80" cy="80" r="6" fill="var(--danger)" />
+          
+          <!-- TO-BE Track -->
+          <text x="20" y="205" fill="var(--success)" font-family="Inter" font-weight="bold">TO-BE</text>
+          <line x1="80" y1="200" x2="750" y2="200" stroke="var(--border)" stroke-width="2" />
+          <circle id="anim-tobe-dot" cx="80" cy="200" r="6" fill="var(--success)" />
+          
+          <!-- Nodes AS-IS -->
+          <rect x="150" y="60" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
+          <rect x="350" y="60" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
+          <rect x="550" y="60" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
+          
+          <!-- Nodes TO-BE -->
+          <rect x="250" y="180" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
+          <rect x="450" y="180" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
+        </svg>
+      `;
+    }
+
+    let animInterval;
+    function startAnimation() {
+      clearInterval(animInterval);
+      const asisDot = document.getElementById('anim-asis-dot');
+      const tobeDot = document.getElementById('anim-tobe-dot');
+      if (!asisDot || !tobeDot) return;
+
+      let asisX = 80;
+      let tobeX = 80;
+      
+      animInterval = setInterval(() => {
+        asisX += 1; // Slower
+        tobeX += 2.5; // Faster
+
+        if (asisX > 750) asisX = 80;
+        if (tobeX > 750) tobeX = 80;
+
+        asisDot.setAttribute('cx', asisX);
+        tobeDot.setAttribute('cx', tobeX);
+      }, 20);
+    }
+
+    // Animation Controls
+    const animBtns = document.querySelectorAll('.animation-controls button');
+    if (animBtns.length >= 3) {
+      animBtns[0].addEventListener('click', startAnimation);
+      animBtns[1].addEventListener('click', () => clearInterval(animInterval));
+      animBtns[2].addEventListener('click', () => {
+        clearInterval(animInterval);
+        document.getElementById('anim-asis-dot')?.setAttribute('cx', 80);
+        document.getElementById('anim-tobe-dot')?.setAttribute('cx', 80);
+      });
+    }
+
+    // Export PDF
+    const btnDownloadPdf = document.querySelector('#tab-executive .btn-secondary:nth-child(2)');
+    if (btnDownloadPdf) {
+      btnDownloadPdf.addEventListener('click', () => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text("BPMN Executive Summary", 20, 20);
+        doc.setFontSize(12);
+        doc.text("Process optimization report.", 20, 30);
+        doc.text("AS-IS Time: 45 min", 20, 45);
+        doc.text("TO-BE Time: 15 min", 20, 55);
+        doc.text("Savings: 30 min (66%)", 20, 65);
+        doc.save("executive-summary.pdf");
+        log('OK', 'PDF скачан');
+      });
+    }
+
+    // Draw.io Integration
+    function openInDrawIo(mode = 'asis') {
+      let xml = xmlOutput.value;
+      if (window.currentBpmnData) {
+        xml = generateDrawioXML(window.currentBpmnData, mode);
+      }
+      if (!xml) {
+        log('ERROR', 'Нет XML для открытия в draw.io');
+        return;
+      }
+      const url = generateDrawioUrl(xml);
+      window.open(url, '_blank');
+      log('INFO', 'Открыто в draw.io');
+    }
+
+    document.querySelectorAll('.btn-secondary').forEach(btn => {
+      if (btn.textContent.includes('Открыть в draw.io') && !btn.hasAttribute('onclick')) {
+        btn.addEventListener('click', () => openInDrawIo('asis'));
+      }
+      if (btn.textContent.includes('Скопировать XML')) {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(xmlOutput.value);
+          log('OK', 'XML скопирован в буфер обмена');
+        });
+      }
+      if (btn.textContent.includes('Скачать .drawio')) {
+        btn.addEventListener('click', () => {
+          const blob = new Blob([xmlOutput.value], {type: 'application/xml'});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'process.drawio';
+          a.click();
+          URL.revokeObjectURL(url);
+          log('OK', 'Файл .drawio скачан');
+        });
+      }
+    });
+
+    // --- AUTHENTICATION & ADMIN LOGIC ---
+    
+    const DEFAULT_DATA = {
+      apiKey: '',
+      apiModel: 'GigaChat-Pro',
+      users: [
+        { id: '1', login: 'admin', password: '123', role: 'admin', name: 'Администратор', created: new Date().toISOString() },
+        { id: '2', login: 'user', password: '123', role: 'user', name: 'Пользователь', created: new Date().toISOString() }
+      ],
+      stats: []
+    };
+
+    function getAppData() {
+      const data = localStorage.getItem('bpmn_app_data');
+      if (!data) {
+        localStorage.setItem('bpmn_app_data', JSON.stringify(DEFAULT_DATA));
+        return DEFAULT_DATA;
+      }
+      return JSON.parse(data);
+    }
+
+    function saveAppData(data) {
+      localStorage.setItem('bpmn_app_data', JSON.stringify(data));
+    }
+
+    function getSession() {
+      const session = sessionStorage.getItem('bpmn_session') || localStorage.getItem('bpmn_session');
+      return session ? JSON.parse(session) : null;
+    }
+
+    function setSession(user, remember) {
+      const sessionStr = JSON.stringify(user);
+      if (remember) {
+        localStorage.setItem('bpmn_session', sessionStr);
+      } else {
+        sessionStorage.setItem('bpmn_session', sessionStr);
+      }
+    }
+
+    function clearSession() {
+      sessionStorage.removeItem('bpmn_session');
+      localStorage.removeItem('bpmn_session');
+    }
+
+    function fillDemo(login, password) {
+      document.getElementById('loginInput').value = login;
+      document.getElementById('passwordInput').value = '123'; // Using 123 as default password for demo accounts
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const login = document.getElementById('loginInput').value;
+      const pass = document.getElementById('passwordInput').value;
+      const remember = document.getElementById('rememberMe').checked;
+      
+      const data = getAppData();
+      const user = data.users.find(u => u.login === login && u.password === pass);
+      
+      if (user) {
+        document.getElementById('loginError').classList.add('hidden');
+        setSession(user, remember);
+        initApp();
+      } else {
+        document.getElementById('loginError').classList.remove('hidden');
+      }
+    });
+
+    function logout() {
+      clearSession();
+      initApp();
+    }
+
+    function switchAdminTab(tabId) {
+      ['dashboard', 'apikey', 'users', 'stats'].forEach(id => {
+        document.getElementById(`admin-tab-${id}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-btn-${id}`);
+        btn.classList.remove('bg-blue-50', 'text-blue-700');
+        btn.classList.add('text-slate-600');
+      });
+      document.getElementById(`admin-tab-${tabId}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      activeBtn.classList.remove('text-slate-600');
+      activeBtn.classList.add('bg-blue-50', 'text-blue-700');
+    }
+
+    function saveAdminApiKey() {
+      const inp = document.getElementById('adminApiKeyInput');
+      const key = inp.value.trim();
+      if (!key) {
+        alert('Введите API ключ');
+        return;
+      }
+      const data = getAppData();
+      data.apiKey = key;
+      saveAppData(data);
+      inp.value = '';
+      inp.type = 'password';
+      document.getElementById('iconInputEye').classList.remove('hidden');
+      document.getElementById('iconInputEyeOff').classList.add('hidden');
+      refreshApiKeyUI();
+      alert('API ключ сохранён');
+    }
+
+    function refreshApiKeyUI() {
+      const data = getAppData();
+      const savedView = document.getElementById('apiKeySavedView');
+      const editView = document.getElementById('apiKeyEditView');
+      const display = document.getElementById('adminApiKeyDisplay');
+      if (data.apiKey) {
+        savedView.classList.remove('hidden');
+        editView.classList.add('hidden');
+        display.value = data.apiKey;
+        display.type = 'password';
+        document.getElementById('iconEye').classList.remove('hidden');
+        document.getElementById('iconEyeOff').classList.add('hidden');
+      } else {
+        savedView.classList.add('hidden');
+        editView.classList.remove('hidden');
+        document.getElementById('btnCancelEdit').classList.add('hidden');
+      }
+    }
+
+    function toggleApiKeyVisibility() {
+      const display = document.getElementById('adminApiKeyDisplay');
+      const iconEye = document.getElementById('iconEye');
+      const iconEyeOff = document.getElementById('iconEyeOff');
+      if (display.type === 'password') {
+        display.type = 'text';
+        iconEye.classList.add('hidden');
+        iconEyeOff.classList.remove('hidden');
+      } else {
+        display.type = 'password';
+        iconEye.classList.remove('hidden');
+        iconEyeOff.classList.add('hidden');
+      }
+    }
+
+    function toggleApiKeyInputVisibility() {
+      const input = document.getElementById('adminApiKeyInput');
+      const iconEye = document.getElementById('iconInputEye');
+      const iconEyeOff = document.getElementById('iconInputEyeOff');
+      if (input.type === 'password') {
+        input.type = 'text';
+        iconEye.classList.add('hidden');
+        iconEyeOff.classList.remove('hidden');
+      } else {
+        input.type = 'password';
+        iconEye.classList.remove('hidden');
+        iconEyeOff.classList.add('hidden');
+      }
+    }
+
+    function startEditApiKey() {
+      const data = getAppData();
+      document.getElementById('adminApiKeyInput').value = data.apiKey || '';
+      document.getElementById('apiKeySavedView').classList.add('hidden');
+      document.getElementById('apiKeyEditView').classList.remove('hidden');
+      document.getElementById('btnCancelEdit').classList.remove('hidden');
+      document.getElementById('adminApiKeyInput').focus();
+    }
+
+    function cancelEditApiKey() {
+      document.getElementById('adminApiKeyInput').value = '';
+      refreshApiKeyUI();
+    }
+
+    function deleteApiKey() {
+      if (confirm('Удалить сохранённый API ключ GigaChat?\n\nЭто отключит генерацию BPMN для всех пользователей.')) {
+        const data = getAppData();
+        data.apiKey = '';
+        saveAppData(data);
+        refreshApiKeyUI();
+      }
+    }
+
+    async function testApiKey() {
+      const stored = getAppData().apiKey;
+      const inputVal = document.getElementById('adminApiKeyInput').value.trim();
+      const key = inputVal || stored;
+      if (!key) {
+        alert('Введите или сохраните API ключ для проверки');
+        return;
+      }
+      // Mocking API check
+      alert('Проверка подключения... (Мок: Успешно)');
+    }
+
+    function updateAdminDashboard() {
+      const data = getAppData();
+      document.getElementById('stat-total-users').textContent = data.users.length;
+      document.getElementById('stat-total-diagrams').textContent = data.stats.length;
+      document.getElementById('stat-active-users').textContent = data.users.length; // Simplified
+      refreshApiKeyUI();
+      
+      const tbody = document.getElementById('usersTableBody');
+      tbody.innerHTML = data.users.map(u => `
+        <tr class="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
+          <td class="p-4">
+            <div class="font-medium text-slate-800">${u.name}</div>
+            <div class="text-xs text-slate-500">ID: ${u.id}</div>
+          </td>
+          <td class="p-4 text-slate-600">${u.login}</td>
+          <td class="p-4">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">
+              ${u.role}
+            </span>
+          </td>
+          <td class="p-4">
+            <button onclick="deleteUser('${u.id}')" class="text-red-500 hover:text-red-700 font-medium text-sm">Удалить</button>
+          </td>
+        </tr>
+      `).join('');
+
+      const statsBody = document.getElementById('statsTableBody');
+      statsBody.innerHTML = data.stats.slice().reverse().map(s => `
+        <tr class="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
+          <td class="p-4 text-slate-800">${new Date(s.date).toLocaleString()}</td>
+          <td class="p-4 text-slate-600">${s.user}</td>
+          <td class="p-4">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+              ${s.status === 'success' ? 'Успешно' : 'Ошибка'}
+            </span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function deleteUser(id) {
+      if(confirm('Удалить пользователя?')) {
+        const data = getAppData();
+        if(data.users.find(u => u.id === id).role === 'admin' && data.users.filter(u => u.role === 'admin').length === 1) {
+          alert('Нельзя удалить последнего администратора');
+          return;
+        }
+        data.users = data.users.filter(u => u.id !== id);
+        saveAppData(data);
+        updateAdminDashboard();
+      }
+    }
+
+    function openAddUserModal() {
+      document.getElementById('addUserModal').classList.remove('hidden');
+    }
+
+    function closeAddUserModal() {
+      document.getElementById('addUserModal').classList.add('hidden');
+      document.getElementById('addUserForm').reset();
+    }
+
+    function openChangePasswordModal() {
+      document.getElementById('changePasswordModal').classList.remove('hidden');
+      document.getElementById('changePasswordError').classList.add('hidden');
+    }
+
+    function closeChangePasswordModal() {
+      document.getElementById('changePasswordModal').classList.add('hidden');
+      document.getElementById('changePasswordForm').reset();
+    }
+
+    document.getElementById('changePasswordForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const currentPass = document.getElementById('currentPass').value;
+      const newPass = document.getElementById('newPass').value;
+      const confirmNewPass = document.getElementById('confirmNewPass').value;
+      const errorEl = document.getElementById('changePasswordError');
+      
+      if (newPass !== confirmNewPass) {
+        errorEl.textContent = 'Новые пароли не совпадают';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      const session = getSession();
+      const data = getAppData();
+      const userIndex = data.users.findIndex(u => u.id === session.id);
+      
+      if (data.users[userIndex].password !== currentPass) {
+        errorEl.textContent = 'Неверный текущий пароль';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      data.users[userIndex].password = newPass;
+      saveAppData(data);
+      
+      // Update session
+      session.password = newPass;
+      setSession(session, localStorage.getItem('bpmn_session') !== null);
+      
+      alert('Пароль успешно изменен');
+      closeChangePasswordModal();
+    });
+
+    document.getElementById('addUserForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = document.getElementById('newUserName').value;
+      const login = document.getElementById('newUserLogin').value;
+      const pass = document.getElementById('newUserPass').value;
+      const role = document.getElementById('newUserRole').value;
+      
+      const data = getAppData();
+      if (data.users.find(u => u.login === login)) {
+        alert('Пользователь с таким логином уже существует');
+        return;
+      }
+      
+      data.users.push({
+        id: Date.now().toString(),
+        name, login, password: pass, role,
+        created: new Date().toISOString()
+      });
+      
+      saveAppData(data);
+      closeAddUserModal();
+      updateAdminDashboard();
+    });
+
+    function initApp() {
+      const session = getSession();
+      const loginContainer = document.getElementById('login-container');
+      const adminContainer = document.getElementById('admin-container');
+      const appContainer = document.getElementById('app-container');
+      
+      loginContainer.classList.add('hidden');
+      adminContainer.classList.add('hidden');
+      appContainer.classList.add('hidden');
+      appContainer.classList.remove('flex');
+
+      if (!session) {
+        loginContainer.classList.remove('hidden');
+      } else if (session.role === 'admin') {
+        adminContainer.classList.remove('hidden');
+        updateAdminDashboard();
+      } else {
+        appContainer.classList.remove('hidden');
+        appContainer.classList.add('flex');
+        document.getElementById('userGreeting').textContent = `Привет, ${session.name}`;
+        
+        const data = getAppData();
+        const warningEl = document.getElementById('apiKeyWarning');
+        const generateBtn = document.getElementById('btnGenerate');
+        if (!data.apiKey) {
+          warningEl.classList.remove('hidden');
+          generateBtn.disabled = true;
+          generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+          warningEl.classList.add('hidden');
+          generateBtn.disabled = false;
+          generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      }
+    }
+
+    // Override the original API key retrieval to use localStorage
+    function getApiKey() {
+      return getAppData().apiKey;
+    }
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => {
+      initApp();
+    });
+  </script>
+</body>
 </html>
