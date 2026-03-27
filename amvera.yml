@@ -9,7 +9,7 @@ build:
     - npm ci
     - npm run build
 run:
-  command: node -e "require('http').createServer((req,res)=>{const fs=require('fs');const path=require('path');let f=path.join('dist',req.url==='/'?'index.html':req.url);fs.readFile(f,(e,d)=>{res.end(d||'')})}).listen(80)"
+  command: npx serve -s dist -l 80
   persistenceMount: /data
   containerPort: "80"
   servicePort: 80
