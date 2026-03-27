@@ -4,9 +4,12 @@
     name: npm
     version: "20"
 build:
-  skip: true
+  skip: false
+  additionalCommands:
+    - npm ci
+    - npm run build
 run:
-  command: npx serve . -l 80
+  command: npx serve -s dist -l 80
   persistenceMount: /data
   containerPort: "80"
   servicePort: 80
