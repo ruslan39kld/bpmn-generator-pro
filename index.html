@@ -1047,7 +1047,7 @@
       btnGenerate.textContent = '⏳ Генерация...';
 
       try {
-        const gigaResponse = await fetch('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {
+        const gigaResponse = await fetch('/api/gigachat', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
