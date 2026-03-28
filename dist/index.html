@@ -1056,7 +1056,7 @@
           body: JSON.stringify({
             model: 'GigaChat',
             messages: [
-              { role: 'system', content: 'Ты эксперт по BPMN. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура: {"elements":[{"id":"s1","name":"Название (до 5 слов)","type":"startEvent|userTask|endEvent","time_min":0}],"flows":[{"id":"f1","from":"s1","to":"s2"}]}\n\nПравила: первый type=startEvent, последний type=endEvent, задачи type=userTask, названия на русском, time_min для задач обязательно.' },
+              { role: 'system', content: 'Ты эксперт по бизнес-процессам и BPMN 2.0. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура: {"elements":[{"id":"s1","name":"Название (до 5 слов)","type":"startEvent|userTask|endEvent|exclusiveGateway","time_min":0}],"flows":[{"id":"f1","from":"s1","to":"s2","label":""}]}\n\nПравила:\n- Извлекай ВСЕ шаги процесса, не пропускай ни один\n- Каждое действие = отдельный userTask\n- Условия и развилки = exclusiveGateway\n- Минимум 5-15 шагов для любого процесса\n- time_min — реалистичное время выполнения каждого шага\n- Названия на русском языке, кратко (до 5 слов)\n- ТОЛЬКО JSON, никаких пояснений' },
               { role: 'user', content: `Проанализируй бизнес-процесс и верни JSON:\n\n${textContent.slice(0, 6000)}` }
             ],
             temperature: 0.1,
