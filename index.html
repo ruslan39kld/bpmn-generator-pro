@@ -1191,16 +1191,16 @@
       const STYLES = {
         startEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;',
         endEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;',
-        userTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#dae8fc;strokeColor=#6c8ebf;',
-        serviceTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#fff2cc;strokeColor=#d6b656;',
+        userTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=middle;align=center;fontSize=11;wordWrap=1;',
+        serviceTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=middle;align=center;fontSize=11;wordWrap=1;',
         exclusiveGateway: 'rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;',
         parallelGateway: 'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;',
         intermediateEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#fff2cc;strokeColor=#d6b656;',
       };
       const SIZES = {
-        startEvent:[44,44], endEvent:[44,44], intermediateEvent:[44,44],
-        userTask:[160,70], serviceTask:[160,70],
-        exclusiveGateway:[60,60], parallelGateway:[60,60]
+        startEvent:[50,50], endEvent:[50,50], intermediateEvent:[50,50],
+        userTask:[180,80], serviceTask:[180,80],
+        exclusiveGateway:[70,70], parallelGateway:[70,70]
       };
 
       let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">\n<root>\n<mxCell id="0"/>\n<mxCell id="1" parent="0"/>\n';
@@ -1208,16 +1208,18 @@
       // Поддержка нового формата с pools/lanes
       if (bpmnJson.pools) {
         const POOL_X = 60;
-        const LANE_H = 160;
-        const CELL_W = 160;
-        const CELL_H = 70;
-        const ELEM_MARGIN = 40;
+        const LANE_H = 200;
+        const CELL_W = 180;
+        const CELL_H = 80;
+        const ELEM_MARGIN = 60;
+        const ELEM_START_X = 80;
 
         let poolY = 40;
 
         bpmnJson.pools.forEach((pool, pi) => {
+          const allElems = pool.lanes.flatMap(l => l.elements);
           const maxElems = Math.max(...pool.lanes.map(l => l.elements.length));
-          const poolW = Math.max(maxElems * (CELL_W + ELEM_MARGIN) + 200, 1200);
+          const poolW = Math.max(allElems.length * (CELL_W + ELEM_MARGIN) + 300, 1400);
           const poolH = pool.lanes.length * LANE_H + 30;
           const poolId = `pool_${pi}`;
 
@@ -1226,12 +1228,12 @@
           let laneY = 30;
           pool.lanes.forEach((lane, li) => {
             const laneId = `lane_${pi}_${li}`;
-            xml += `<mxCell id="${laneId}" value="${esc(lane.name)}" style="swimlane;startSize=30;horizontal=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="${poolId}"><mxGeometry x="0" y="${laneY}" width="${poolW}" height="${LANE_H}" as="geometry"/></mxCell>\n`;
+            xml += `<mxCell id="${laneId}" value="${esc(lane.name)}" style="swimlane;startSize=40;horizontal=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;" vertex="1" parent="${poolId}"><mxGeometry x="0" y="${laneY}" width="${poolW}" height="${LANE_H}" as="geometry"/></mxCell>\n`;
 
-            let elemX = 60;
+            let elemX = ELEM_START_X;
             lane.elements.forEach((el) => {
               const [w, h] = SIZES[el.type] || [CELL_W, CELL_H];
-              const elemY = LANE_H / 2 - h / 2;
+              const elemY = Math.round(LANE_H / 2 - h / 2);
               const style = STYLES[el.type] || STYLES.userTask;
               const timeLabel = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
               xml += `<mxCell id="${esc(el.id)}" value="${esc(el.name)}${timeLabel}" style="${style}" vertex="1" parent="${laneId}"><mxGeometry x="${elemX}" y="${elemY}" width="${w}" height="${h}" as="geometry"/></mxCell>\n`;
@@ -1257,7 +1259,7 @@
       // Стрелки
       (bpmnJson.flows||[]).forEach((fl, i) => {
         const edgeId = `edge_${i}`;
-        xml += `<mxCell id="${edgeId}" value="${esc(fl.label||'')}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>\n`;
+        xml += `<mxCell id="${edgeId}" value="${esc(fl.label||'')}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=elbowEdgeStyle;elbow=vertical;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>\n`;
       });
 
       xml += '</root>\n</mxGraphModel>';
