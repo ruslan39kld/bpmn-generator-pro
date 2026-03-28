@@ -4,7 +4,9 @@ meta:
     name: npm
     version: "20"
 build:
-  skip: true
+  skip: false
+  additionalCommands:
+    - npm ci
 run:
   command: node server.cjs
   persistenceMount: /data
