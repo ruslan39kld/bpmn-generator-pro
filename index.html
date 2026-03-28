@@ -10,6 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root {
@@ -806,7 +807,7 @@
             <span>Перетащи DOCX или TXT</span>
             <span class="muted-text">(или нажми для выбора)</span>
           </div>
-          <input type="file" id="fileInput" hidden accept=".docx,.txt">
+          <input type="file" id="fileInput" hidden accept=".docx,.txt,.pdf,.xlsx,.xls,.jpg,.jpeg,.png">
         </div>
         <div id="fileInfo" class="file-info hidden">
           <span id="fileName"></span>
@@ -1008,6 +1009,39 @@
             resolve(event.target.result);
           };
           reader.readAsText(file);
+        } else if (file.name.endsWith('.pdf')) {
+          const reader = new FileReader();
+          reader.onload = async (e) => {
+            try {
+              const pdfjsLib = window['pdfjs-dist/build/pdf'];
+              if (!pdfjsLib) { resolve('[PDF файл загружен — текст будет извлечён]'); return; }
+              const pdf = await pdfjsLib.getDocument({data: e.target.result}).promise;
+              let text = '';
+              for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(item => item.str).join(' ') + '\n';
+              }
+              resolve(text);
+            } catch(err) { resolve('[PDF: ' + file.name + ']'); }
+          };
+          reader.readAsArrayBuffer(file);
+        } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const XLSX = window.XLSX;
+            if (!XLSX) { resolve('[Excel файл: ' + file.name + ']'); return; }
+            const wb = XLSX.read(e.target.result, {type: 'array'});
+            let text = '';
+            wb.SheetNames.forEach(name => {
+              text += '[Лист: ' + name + ']\n';
+              text += XLSX.utils.sheet_to_csv(wb.Sheets[name]) + '\n';
+            });
+            resolve(text);
+          };
+          reader.readAsArrayBuffer(file);
+        } else if (file.name.match(/\.(jpg|jpeg|png)$/i)) {
+          resolve('[Изображение: ' + file.name + ' — опишите процесс текстом]');
         } else {
           reject(new Error('Неподдерживаемый формат файла'));
         }
@@ -1056,7 +1090,7 @@
           body: JSON.stringify({
             model: 'GigaChat',
             messages: [
-              { role: 'system', content: 'Ты эксперт по бизнес-процессам и BPMN 2.0. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура: {"elements":[{"id":"s1","name":"Название (до 5 слов)","type":"startEvent|userTask|endEvent|exclusiveGateway","time_min":0}],"flows":[{"id":"f1","from":"s1","to":"s2","label":""}]}\n\nПравила:\n- Извлекай ВСЕ шаги процесса, не пропускай ни один\n- Каждое действие = отдельный userTask\n- Условия и развилки = exclusiveGateway\n- Минимум 5-15 шагов для любого процесса\n- time_min — реалистичное время выполнения каждого шага\n- Названия на русском языке, кратко (до 5 слов)\n- ТОЛЬКО JSON, никаких пояснений' },
+              { role: 'system', content: 'Ты senior бизнес-аналитик и эксперт BPMN 2.0. Верни ТОЛЬКО валидный JSON.\n\nСтруктура:\n{"elements":[{"id":"s1","name":"Название до 5 слов","type":"startEvent|userTask|exclusiveGateway|parallelGateway|endEvent","time_min":5,"role":"Роль исполнителя"}],"flows":[{"id":"f1","from":"s1","to":"s2","label":"условие если нужно"}]}\n\nПравила профессионального BPMN:\n- МИНИМУМ 10-20 шагов — извлекай каждое действие отдельно\n- Каждое действие сотрудника = userTask со своей ролью\n- Условия и ветвления = exclusiveGateway с подписанными стрелками\n- Параллельные действия = parallelGateway\n- Первый элемент type=startEvent, последний type=endEvent\n- role — конкретная должность или роль (Менеджер, Бухгалтер, Директор и т.д.)\n- time_min — реалистичное время в минутах\n- Стрелки flows с label для условий (Да/Нет, Одобрено/Отклонено)\n- Названия на русском языке\n- ТОЛЬКО JSON без markdown и пояснений' },
               { role: 'user', content: `Проанализируй бизнес-процесс и верни JSON:\n\n${textContent.slice(0, 6000)}` }
             ],
             temperature: 0.1,
