@@ -766,7 +766,7 @@
 
   <main class="main">
     <aside class="left-panel">
-      
+
       <div class="section">
         <label class="section-label">ИСТОЧНИК ДАННЫХ</label>
         <div class="drop-zone" id="dropZone">
@@ -810,7 +810,7 @@
     </aside>
 
     <section class="right-panel">
-      
+
       <div class="tab-bar">
         <button class="tab-btn active" data-tab="tab-bpmn">BPMN</button>
         <button class="tab-btn" data-tab="tab-compare">AS-IS vs TO-BE</button>
@@ -1016,7 +1016,7 @@
       btnGenerate.textContent = '⏳ Генерация...';
 
       try {
-        const gigaResponse = await fetch('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {
+        const gigaResponse = await fetch('/api/gigachat', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -1041,7 +1041,7 @@
 
         xmlOutput.value = generateDrawioXML(window.currentBpmnData);
         log('OK', 'BPMN успешно сгенерирован');
-        
+
         // Update counters
         const _tasks = window.currentBpmnData.elements.filter(e => e.type === 'userTask').length;
         const _gateways = window.currentBpmnData.elements.filter(e => e.type.toLowerCase().includes('gateway')).length;
@@ -1095,7 +1095,7 @@
 
       } catch (err) {
         log('ERROR', 'Ошибка генерации: ' + err.message);
-        
+
         // Log stats
         const data = getAppData();
         data.stats.push({
@@ -1114,7 +1114,7 @@
 
     function generateDrawioXML(bpmnJson, mode) {
       function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-      
+
       const STYLES = {
         startEvent:'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;',
         endEvent:'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;',
@@ -1129,7 +1129,7 @@
       };
 
       let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<mxGraphModel adaptiveColors="auto">\n<root>\n<mxCell id="0"/>\n<mxCell id="1" parent="0"/>\n';
-      
+
       let x = 80;
       (bpmnJson.elements||[]).forEach(el => {
         const [w,h] = SIZES[el.type]||[160,70];
@@ -1163,7 +1163,7 @@
 
     function buildAnimationSteps(bpmnJson) {
       const tasks = (bpmnJson.elements || []).filter(e => e.time_min > 0);
-      
+
       // AS-IS шаги
       window.animStepsAsis = tasks.map((el, i) => ({
         x: 80 + i * 160,
@@ -1194,13 +1194,13 @@
     function renderAnimationSVG() {
       const steps = window.animStepsAsis || [];
       const totalW = Math.max(steps.length * 160 + 100, 800);
-      
+
       let svgContent = `<svg width="100%" height="260" viewBox="0 0 ${totalW} 260" xmlns="http://www.w3.org/2000/svg">`;
-      
+
       // Дорожка AS-IS
       svgContent += `<text x="10" y="65" font-size="11" fill="#ef4444" font-weight="600">AS-IS</text>`;
       svgContent += `<line x1="60" y1="70" x2="${totalW-20}" y2="70" stroke="#e2e8f0" stroke-width="1"/>`;
-      
+
       // Блоки AS-IS с названиями
       (window.animStepsAsis||[]).forEach(s => {
         svgContent += `<rect x="${s.x}" y="48" width="${s.width}" height="44" rx="6" fill="white" stroke="#cbd5e1" stroke-width="1"/>`;
@@ -1238,7 +1238,7 @@
       </g>`;
 
       svgContent += `</svg>`;
-      
+
       const container = document.getElementById('animation-container');
       if (container) container.innerHTML = svgContent;
     }
@@ -1275,17 +1275,17 @@
           <text x="20" y="85" fill="var(--danger)" font-family="Inter" font-weight="bold">AS-IS</text>
           <line x1="80" y1="80" x2="750" y2="80" stroke="var(--border)" stroke-width="2" />
           <circle id="anim-asis-dot" cx="80" cy="80" r="6" fill="var(--danger)" />
-          
+
           <!-- TO-BE Track -->
           <text x="20" y="205" fill="var(--success)" font-family="Inter" font-weight="bold">TO-BE</text>
           <line x1="80" y1="200" x2="750" y2="200" stroke="var(--border)" stroke-width="2" />
           <circle id="anim-tobe-dot" cx="80" cy="200" r="6" fill="var(--success)" />
-          
+
           <!-- Nodes AS-IS -->
           <rect x="150" y="60" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
           <rect x="350" y="60" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
           <rect x="550" y="60" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
-          
+
           <!-- Nodes TO-BE -->
           <rect x="250" y="180" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
           <rect x="450" y="180" width="40" height="40" rx="4" fill="var(--surface)" stroke="var(--border)" />
@@ -1302,7 +1302,7 @@
 
       let asisX = 80;
       let tobeX = 80;
-      
+
       animInterval = setInterval(() => {
         asisX += 1; // Slower
         tobeX += 2.5; // Faster
@@ -1385,7 +1385,7 @@
     });
 
     // --- AUTHENTICATION & ADMIN LOGIC ---
-    
+
     const DEFAULT_DATA = {
       apiKey: '',
       apiModel: 'GigaChat-Pro',
@@ -1438,10 +1438,10 @@
       const login = document.getElementById('loginInput').value;
       const pass = document.getElementById('passwordInput').value;
       const remember = document.getElementById('rememberMe').checked;
-      
+
       const data = getAppData();
       const user = data.users.find(u => u.login === login && u.password === pass);
-      
+
       if (user) {
         document.getElementById('loginError').classList.add('hidden');
         setSession(user, remember);
@@ -1483,7 +1483,7 @@
         alert('Введите API ключ для проверки');
         return;
       }
-      
+
       // Mocking API check
       alert('Проверка подключения... (Мок: Успешно)');
     }
@@ -1494,7 +1494,7 @@
       document.getElementById('stat-total-diagrams').textContent = data.stats.length;
       document.getElementById('stat-active-users').textContent = data.users.length; // Simplified
       document.getElementById('adminApiKeyInput').value = data.apiKey || '';
-      
+
       const tbody = document.getElementById('usersTableBody');
       tbody.innerHTML = data.users.map(u => `
         <tr class="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
@@ -1566,7 +1566,7 @@
       const newPass = document.getElementById('newPass').value;
       const confirmNewPass = document.getElementById('confirmNewPass').value;
       const errorEl = document.getElementById('changePasswordError');
-      
+
       if (newPass !== confirmNewPass) {
         errorEl.textContent = 'Новые пароли не совпадают';
         errorEl.classList.remove('hidden');
@@ -1576,7 +1576,7 @@
       const session = getSession();
       const data = getAppData();
       const userIndex = data.users.findIndex(u => u.id === session.id);
-      
+
       if (data.users[userIndex].password !== currentPass) {
         errorEl.textContent = 'Неверный текущий пароль';
         errorEl.classList.remove('hidden');
@@ -1585,11 +1585,11 @@
 
       data.users[userIndex].password = newPass;
       saveAppData(data);
-      
+
       // Update session
       session.password = newPass;
       setSession(session, localStorage.getItem('bpmn_session') !== null);
-      
+
       alert('Пароль успешно изменен');
       closeChangePasswordModal();
     });
@@ -1600,19 +1600,19 @@
       const login = document.getElementById('newUserLogin').value;
       const pass = document.getElementById('newUserPass').value;
       const role = document.getElementById('newUserRole').value;
-      
+
       const data = getAppData();
       if (data.users.find(u => u.login === login)) {
         alert('Пользователь с таким логином уже существует');
         return;
       }
-      
+
       data.users.push({
         id: Date.now().toString(),
         name, login, password: pass, role,
         created: new Date().toISOString()
       });
-      
+
       saveAppData(data);
       closeAddUserModal();
       updateAdminDashboard();
@@ -1623,7 +1623,7 @@
       const loginContainer = document.getElementById('login-container');
       const adminContainer = document.getElementById('admin-container');
       const appContainer = document.getElementById('app-container');
-      
+
       loginContainer.classList.add('hidden');
       adminContainer.classList.add('hidden');
       appContainer.classList.add('hidden');
@@ -1638,7 +1638,7 @@
         appContainer.classList.remove('hidden');
         appContainer.classList.add('flex');
         document.getElementById('userGreeting').textContent = `Привет, ${session.name}`;
-        
+
         const data = getAppData();
         const warningEl = document.getElementById('apiKeyWarning');
         const generateBtn = document.getElementById('btnGenerate');
