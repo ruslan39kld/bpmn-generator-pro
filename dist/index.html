@@ -1108,16 +1108,14 @@
         log('OK', 'BPMN успешно сгенерирован');
         
         // Update counters
-        // Support both formats
         const allElements = window.currentBpmnData.pools
-          ? window.currentBpmnData.pools.flatMap(p => p.lanes.flatMap(l => l.elements))
+          ? window.currentBpmnData.pools.flatMap(p => p.lanes.flatMap(l => l.elements || []))
           : (window.currentBpmnData.elements || []);
-
-        const _tasks = allElements.filter(e => e.type === 'userTask' || e.type === 'serviceTask').length;
-        const _gateways = allElements.filter(e => e.type.toLowerCase().includes('gateway')).length;
-        const _roles = window.currentBpmnData.pools
+        const _tasks    = allElements.filter(e => e.type === 'userTask' || e.type === 'serviceTask').length;
+        const _gateways = allElements.filter(e => (e.type||'').toLowerCase().includes('gateway')).length;
+        const _roles    = window.currentBpmnData.pools
           ? window.currentBpmnData.pools.flatMap(p => p.lanes).length
-          : 1;
+          : new Set(allElements.map(e => e.role).filter(Boolean)).size || 1;
         const _totalTime = allElements.reduce((s, e) => s + (e.time_min || 0), 0);
         document.querySelector('.counters-row').innerHTML = `
           <span class="badge">Задач: ${_tasks}</span>
@@ -1188,76 +1186,92 @@
     function generateDrawioXML(bpmnJson, mode) {
       function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-      const STYLES = {
-        startEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;',
-        endEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;',
-        userTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#dae8fc;strokeColor=#6c8ebf;',
-        serviceTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#fff2cc;strokeColor=#d6b656;',
-        exclusiveGateway: 'rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;',
-        parallelGateway: 'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;',
-        intermediateEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#fff2cc;strokeColor=#d6b656;',
-      };
+      const LANE_H    = 220;
+      const CELL_W    = 200;
+      const CELL_H    = 80;
+      const GAP       = 80;
+      const START_X   = 100;
+      const LANE_LABEL_W = 40;
+
       const SIZES = {
-        startEvent:[44,44], endEvent:[44,44], intermediateEvent:[44,44],
-        userTask:[160,70], serviceTask:[160,70],
-        exclusiveGateway:[60,60], parallelGateway:[60,60]
+        startEvent:       [50, 50],
+        endEvent:         [50, 50],
+        intermediateEvent:[44, 44],
+        userTask:         [CELL_W, CELL_H],
+        serviceTask:      [CELL_W, CELL_H],
+        exclusiveGateway: [70, 70],
+        parallelGateway:  [70, 70],
       };
 
-      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">\n<root>\n<mxCell id="0"/>\n<mxCell id="1" parent="0"/>\n';
+      const STYLES = {
+        startEvent:        'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;',
+        endEvent:          'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;',
+        intermediateEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;',
+        userTask:          'rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;verticalAlign=middle;align=center;fontSize=11;fontStyle=0;spacingLeft=4;spacingRight=4;overflow=hidden;',
+        serviceTask:       'rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;verticalAlign=middle;align=center;fontSize=11;fontStyle=0;spacingLeft=4;spacingRight=4;overflow=hidden;',
+        exclusiveGateway:  'rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;verticalAlign=middle;fontSize=11;',
+        parallelGateway:   'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;verticalAlign=middle;fontSize=11;',
+      };
 
-      // Поддержка нового формата с pools/lanes
+      const EDGE_STYLE = 'edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;labelBackgroundColor=#ffffff;';
+
+      let idCounter = 1000;
+      const newId = () => `cell_${idCounter++}`;
+
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+`;
+
+      // Поддержка формата pools/lanes
       if (bpmnJson.pools) {
-        const POOL_X = 60;
-        const LANE_H = 200;
-        const CELL_W = 180;
-        const CELL_H = 80;
-        const ELEM_MARGIN = 40;
-
         let poolY = 40;
 
         bpmnJson.pools.forEach((pool, pi) => {
-          const maxElems = Math.max(...pool.lanes.map(l => l.elements.length));
-          const poolW = Math.max(maxElems * (CELL_W + ELEM_MARGIN) + 200, 1200);
+          const maxInLane = Math.max(...pool.lanes.map(l => (l.elements||[]).length), 1);
+          const poolW = Math.max(maxInLane * (CELL_W + GAP) + START_X + 100, 1400);
           const poolH = pool.lanes.length * LANE_H + 30;
           const poolId = `pool_${pi}`;
 
-          xml += `<mxCell id="${poolId}" value="${esc(pool.name)}" style="shape=pool;startSize=30;horizontal=1;childLayout=stackLayout;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;swimlaneHead=0;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="${POOL_X}" y="${poolY}" width="${poolW}" height="${poolH}" as="geometry"/></mxCell>\n`;
+          xml += `<mxCell id="${poolId}" value="${esc(pool.name)}" style="shape=table;startSize=30;horizontal=1;childLayout=tableLayout;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;swimlaneHead=0;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="60" y="${poolY}" width="${poolW}" height="${poolH}" as="geometry"/></mxCell>\n`;
 
           let laneY = 30;
           pool.lanes.forEach((lane, li) => {
             const laneId = `lane_${pi}_${li}`;
-            xml += `<mxCell id="${laneId}" value="${esc(lane.name)}" style="swimlane;startSize=30;horizontal=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="${poolId}"><mxGeometry x="0" y="${laneY}" width="${poolW}" height="${LANE_H}" as="geometry"/></mxCell>\n`;
+            const elems  = lane.elements || [];
 
-            let elemX = 60;
-            lane.elements.forEach((el) => {
+            xml += `<mxCell id="${laneId}" value="${esc(lane.name)}" style="swimlane;startSize=${LANE_LABEL_W};horizontal=0;fillColor=#f8f8f8;strokeColor=#b0b0b0;fontStyle=1;fontSize=12;fontColor=#333333;" vertex="1" parent="${poolId}"><mxGeometry x="0" y="${laneY}" width="${poolW}" height="${LANE_H}" as="geometry"/></mxCell>\n`;
+
+            let elemX = START_X;
+            elems.forEach((el) => {
               const [w, h] = SIZES[el.type] || [CELL_W, CELL_H];
-              const elemY = LANE_H / 2 - h / 2;
-              const style = STYLES[el.type] || STYLES.userTask;
-              const timeLabel = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
+              const elemY  = Math.round((LANE_H - h) / 2);
+              const style  = STYLES[el.type] || STYLES.userTask;
+              const timeLabel = (el.time_min > 0) ? `&#xa;⏱ ${el.time_min} мин` : '';
               xml += `<mxCell id="${esc(el.id)}" value="${esc(el.name)}${timeLabel}" style="${style}" vertex="1" parent="${laneId}"><mxGeometry x="${elemX}" y="${elemY}" width="${w}" height="${h}" as="geometry"/></mxCell>\n`;
-              elemX += w + ELEM_MARGIN;
+              elemX += w + GAP;
             });
             laneY += LANE_H;
           });
           poolY += poolH + 40;
         });
       } else {
-        // Fallback: старый формат elements/flows
-        const CELL_W = 160, CELL_H = 70;
+        // Fallback: старый формат elements[]
         let x = 80;
         (bpmnJson.elements||[]).forEach(el => {
           const [w, h] = SIZES[el.type] || [CELL_W, CELL_H];
           const style = STYLES[el.type] || STYLES.userTask;
           const timeLabel = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
           xml += `<mxCell id="${esc(el.id)}" value="${esc(el.name)}${timeLabel}" style="${style}" vertex="1" parent="1"><mxGeometry x="${x}" y="${200-h/2}" width="${w}" height="${h}" as="geometry"/></mxCell>\n`;
-          x += w + 40;
+          x += w + GAP;
         });
       }
 
       // Стрелки
       (bpmnJson.flows||[]).forEach((fl, i) => {
-        const edgeId = `edge_${i}`;
-        xml += `<mxCell id="${edgeId}" value="${esc(fl.label||'')}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>\n`;
+        xml += `<mxCell id="edge_${i}" value="${esc(fl.label||'')}" style="${EDGE_STYLE}" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>\n`;
       });
 
       xml += '</root>\n</mxGraphModel>';
