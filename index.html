@@ -1050,7 +1050,7 @@
         const gigaResponse = await fetch('/api/gigachat', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            'Authorization': `Basic ${apiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
