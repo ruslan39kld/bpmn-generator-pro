@@ -615,12 +615,43 @@
       <!-- API Key Tab -->
       <div id="admin-tab-apikey" class="hidden space-y-6">
         <h1 class="text-2xl font-bold text-slate-800">Настройки API</h1>
-        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 max-w-2xl">
-          <label class="block text-sm font-medium text-slate-700 mb-2">GigaChat API Key</label>
-          <input type="password" id="adminApiKeyInput" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none mb-4" placeholder="Введите ключ авторизации">
-          <div class="flex space-x-3">
-            <button onclick="saveAdminApiKey()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-xl transition-colors">Сохранить</button>
-            <button onclick="testApiKey()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors">Проверить подключение</button>
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <label class="block text-sm font-medium text-slate-700 mb-3">GigaChat API Key</label>
+
+          <!-- Режим просмотра -->
+          <div id="apikey-view-mode" style="display:none;">
+            <div class="relative mb-4">
+              <input type="password" id="apikey-display" readonly
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 pr-12 outline-none font-mono text-sm">
+              <button type="button" id="apikey-view-toggle"
+                onclick="toggleApiKeyVisibility('apikey-display','apikey-view-toggle')"
+                class="absolute inset-y-0 right-3 text-slate-400 hover:text-slate-600">👁</button>
+            </div>
+            <div class="flex gap-3">
+              <button type="button" onclick="document.getElementById('apikey-view-mode').style.display='none';document.getElementById('apikey-edit-mode').style.display='block';document.getElementById('adminApiKeyInput').value=getAppData().apiKey;"
+                class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-5 rounded-xl transition-colors">Редактировать</button>
+              <button type="button" onclick="deleteApiKey()"
+                class="bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 px-5 rounded-xl transition-colors">Удалить</button>
+              <button type="button" onclick="testApiKey()"
+                class="ml-auto bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-5 rounded-xl transition-colors">Проверить подключение</button>
+            </div>
+          </div>
+
+          <!-- Режим редактирования -->
+          <div id="apikey-edit-mode" style="display:none;">
+            <div class="relative mb-4">
+              <input type="password" id="adminApiKeyInput" placeholder="Введите Bearer-токен GigaChat"
+                class="w-full bg-white border border-blue-300 rounded-xl px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm">
+              <button type="button" id="apikey-edit-toggle"
+                onclick="toggleApiKeyVisibility('adminApiKeyInput','apikey-edit-toggle')"
+                class="absolute inset-y-0 right-3 text-slate-400 hover:text-slate-600">👁</button>
+            </div>
+            <div class="flex gap-3">
+              <button type="button" onclick="saveAdminApiKey()"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-xl transition-colors">Сохранить</button>
+              <button type="button" onclick="refreshApiKeyUI()"
+                class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-6 rounded-xl transition-colors">Отмена</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1470,11 +1501,52 @@
     }
 
     function saveAdminApiKey() {
-      const key = document.getElementById('adminApiKeyInput').value;
+      const inp = document.getElementById('adminApiKeyInput');
+      const key = inp.value.trim();
+      if (!key) { alert('Введите ключ'); return; }
       const data = getAppData();
       data.apiKey = key;
       saveAppData(data);
-      alert('API ключ сохранен');
+      alert('API ключ сохранён');
+      refreshApiKeyUI();
+    }
+
+    function refreshApiKeyUI() {
+      const data = getAppData();
+      const hasKey = !!data.apiKey;
+      const viewMode = document.getElementById('apikey-view-mode');
+      const editMode = document.getElementById('apikey-edit-mode');
+      const displayField = document.getElementById('apikey-display');
+      if (hasKey) {
+        viewMode.style.display = 'block';
+        editMode.style.display = 'none';
+        displayField.value = data.apiKey;
+        displayField.type = 'password';
+      } else {
+        viewMode.style.display = 'none';
+        editMode.style.display = 'block';
+        document.getElementById('adminApiKeyInput').value = '';
+      }
+    }
+
+    function deleteApiKey() {
+      if (!confirm('Удалить API ключ?')) return;
+      const data = getAppData();
+      data.apiKey = '';
+      saveAppData(data);
+      refreshApiKeyUI();
+    }
+
+    function toggleApiKeyVisibility(fieldId, btnId) {
+      const field = document.getElementById(fieldId);
+      const btn = document.getElementById(btnId);
+      if (field.type === 'password') {
+        field.type = 'text';
+        btn.textContent = '🙈';
+      } else {
+        field.type = 'password';
+        btn.textContent = '👁';
+      }
     }
 
     async function testApiKey() {
@@ -1493,7 +1565,7 @@
       document.getElementById('stat-total-users').textContent = data.users.length;
       document.getElementById('stat-total-diagrams').textContent = data.stats.length;
       document.getElementById('stat-active-users').textContent = data.users.length; // Simplified
-      document.getElementById('adminApiKeyInput').value = data.apiKey || '';
+      refreshApiKeyUI();
       
       const tbody = document.getElementById('usersTableBody');
       tbody.innerHTML = data.users.map(u => `
