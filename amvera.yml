@@ -4,11 +4,9 @@ meta:
     name: npm
     version: "20"
 build:
-  skip: false
-  additionalCommands:
-    - npm ci
+  skip: true
 run:
-  command: node server.js
+  command: node server.cjs
   persistenceMount: /data
   containerPort: "80"
   servicePort: 80
