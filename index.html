@@ -1090,7 +1090,7 @@
           body: JSON.stringify({
             model: 'GigaChat-Max',
             messages: [
-              { role: 'system', content: 'Ты senior бизнес-аналитик и эксперт BPMN 2.0. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура JSON:\n{"elements":[{"id":"s1","name":"Название до 5 слов","type":"startEvent|userTask|serviceTask|exclusiveGateway|parallelGateway|endEvent","time_min":5,"role":"Пользователь|Система|Менеджер|etc"}],"flows":[{"id":"f1","from":"s1","to":"s2","label":""}]}\n\nТипы элементов:\n- startEvent: начало процесса (1 штука)\n- endEvent: завершение процесса (1 штука)\n- userTask: действие пользователя (синий прямоугольник)\n- serviceTask: автоматическое действие системы (жёлтый прямоугольник)\n- exclusiveGateway: ветвление с условием (ромб с X)\n- parallelGateway: параллельные действия (ромб с +)\n\nПравила:\n- Извлекай КАЖДОЕ действие из документа отдельным элементом\n- МИНИМУМ 8-15 шагов\n- Действия пользователя = userTask с role="Пользователь"\n- Автоматические действия системы = serviceTask с role="Система"\n- Условия (если/или/в случае) = exclusiveGateway со стрелками с подписями\n- time_min: реалистичное время каждого шага\n- Стрелки flows: для gateway добавляй label="Да"/"Нет" или условие\n- Названия на русском языке, кратко до 5 слов\n- ТОЛЬКО JSON, никаких пояснений' },
+              { role: 'system', content: 'Ты эксперт-аналитик BPMN 2.0 с 10-летним опытом моделирования сложных бизнес-процессов уровня enterprise. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура JSON:\n{"pools":[{"id":"pool1","name":"Название пула/организации","lanes":[{"id":"lane1","name":"Роль/Должность исполнителя","elements":[{"id":"e1","name":"Краткое название до 5 слов","type":"startEvent|endEvent|userTask|serviceTask|exclusiveGateway|parallelGateway|intermediateEvent","time_min":5,"description":"Подробное описание действия"}]}]}],"flows":[{"id":"f1","from":"e1","to":"e2","label":"условие (Да/Нет/название)"}]}\n\nПравила профессионального BPMN 2.0:\n- Создавай МИНИМУМ 2-4 swimlane дорожки по ролям исполнителей\n- МИНИМУМ 12-20 элементов в процессе\n- Каждая роль — отдельная swimlane (Инициатор, Исполнитель, Система, Руководитель, Контролёр и т.д.)\n- exclusiveGateway — для условий (Да/Нет, Одобрено/Отклонено, Успешно/Ошибка)\n- parallelGateway — для параллельных действий\n- intermediateEvent — для ожиданий, таймеров, получения сообщений\n- serviceTask — для автоматических системных действий\n- userTask — для действий пользователя\n- Стрелки flows с подписями для всех шлюзов\n- Цикличные процессы (возвраты на доработку) обязательны\n- time_min — реалистичное время каждого шага\n- Названия на русском языке, кратко до 5 слов\n- ТОЛЬКО JSON без пояснений' },
               { role: 'user', content: `Проанализируй бизнес-процесс и верни JSON:\n\n${textContent.slice(0, 6000)}` }
             ],
             temperature: 0.1,
@@ -1108,13 +1108,21 @@
         log('OK', 'BPMN успешно сгенерирован');
         
         // Update counters
-        const _tasks = window.currentBpmnData.elements.filter(e => e.type === 'userTask').length;
-        const _gateways = window.currentBpmnData.elements.filter(e => e.type.toLowerCase().includes('gateway')).length;
-        const _totalTime = window.currentBpmnData.elements.reduce((s, e) => s + (e.time_min || 0), 0);
+        // Support both formats
+        const allElements = window.currentBpmnData.pools
+          ? window.currentBpmnData.pools.flatMap(p => p.lanes.flatMap(l => l.elements))
+          : (window.currentBpmnData.elements || []);
+
+        const _tasks = allElements.filter(e => e.type === 'userTask' || e.type === 'serviceTask').length;
+        const _gateways = allElements.filter(e => e.type.toLowerCase().includes('gateway')).length;
+        const _roles = window.currentBpmnData.pools
+          ? window.currentBpmnData.pools.flatMap(p => p.lanes).length
+          : 1;
+        const _totalTime = allElements.reduce((s, e) => s + (e.time_min || 0), 0);
         document.querySelector('.counters-row').innerHTML = `
           <span class="badge">Задач: ${_tasks}</span>
           <span class="badge">Шлюзов: ${_gateways}</span>
-          <span class="badge">Ролей: 1</span>
+          <span class="badge">Ролей: ${_roles}</span>
           <span class="badge">Время: ${_totalTime} мин</span>
         `;
 
@@ -1179,33 +1187,77 @@
 
     function generateDrawioXML(bpmnJson, mode) {
       function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-      
+
       const STYLES = {
-        startEvent:'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;',
-        endEvent:'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;',
-        userTask:'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#dae8fc;strokeColor=#6c8ebf;',
-        serviceTask:'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#fff2cc;strokeColor=#d6b656;',
-        exclusiveGateway:'rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;',
-        parallelGateway:'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;'
+        startEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;',
+        endEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;',
+        userTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#dae8fc;strokeColor=#6c8ebf;',
+        serviceTask: 'rounded=1;whiteSpace=wrap;html=1;arcSize=20;fillColor=#fff2cc;strokeColor=#d6b656;',
+        exclusiveGateway: 'rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;',
+        parallelGateway: 'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;',
+        intermediateEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#fff2cc;strokeColor=#d6b656;',
       };
       const SIZES = {
-        startEvent:[44,44],endEvent:[44,44],userTask:[160,70],serviceTask:[160,70],
-        exclusiveGateway:[54,54],parallelGateway:[54,54]
+        startEvent:[44,44], endEvent:[44,44], intermediateEvent:[44,44],
+        userTask:[160,70], serviceTask:[160,70],
+        exclusiveGateway:[60,60], parallelGateway:[60,60]
       };
 
-      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<mxGraphModel adaptiveColors="auto">\n<root>\n<mxCell id="0"/>\n<mxCell id="1" parent="0"/>\n';
-      
-      let x = 80;
-      (bpmnJson.elements||[]).forEach(el => {
-        const [w,h] = SIZES[el.type]||[160,70];
-        const t = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
-        const style = STYLES[el.type]||STYLES.userTask;
-        xml += `<mxCell id="${esc(el.id)}" value="${esc(el.name)}${t}" style="${style}" vertex="1" parent="1"><mxGeometry x="${x}" y="${200-h/2}" width="${w}" height="${h}" as="geometry"/></mxCell>\n`;
-        x += 210;
-      });
+      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">\n<root>\n<mxCell id="0"/>\n<mxCell id="1" parent="0"/>\n';
 
-      (bpmnJson.flows||[]).forEach(fl => {
-        xml += `<mxCell id="${esc(fl.id)}" value="${esc(fl.label||'')}" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>\n`;
+      // Поддержка нового формата с pools/lanes
+      if (bpmnJson.pools) {
+        const POOL_X = 60;
+        const LANE_H = 160;
+        const CELL_W = 160;
+        const CELL_H = 70;
+        const ELEM_MARGIN = 40;
+
+        let poolY = 40;
+
+        bpmnJson.pools.forEach((pool, pi) => {
+          const maxElems = Math.max(...pool.lanes.map(l => l.elements.length));
+          const poolW = Math.max(maxElems * (CELL_W + ELEM_MARGIN) + 200, 1200);
+          const poolH = pool.lanes.length * LANE_H + 30;
+          const poolId = `pool_${pi}`;
+
+          xml += `<mxCell id="${poolId}" value="${esc(pool.name)}" style="shape=pool;startSize=30;horizontal=1;childLayout=stackLayout;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;swimlaneHead=0;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="${POOL_X}" y="${poolY}" width="${poolW}" height="${poolH}" as="geometry"/></mxCell>\n`;
+
+          let laneY = 30;
+          pool.lanes.forEach((lane, li) => {
+            const laneId = `lane_${pi}_${li}`;
+            xml += `<mxCell id="${laneId}" value="${esc(lane.name)}" style="swimlane;startSize=30;horizontal=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="${poolId}"><mxGeometry x="0" y="${laneY}" width="${poolW}" height="${LANE_H}" as="geometry"/></mxCell>\n`;
+
+            let elemX = 60;
+            lane.elements.forEach((el) => {
+              const [w, h] = SIZES[el.type] || [CELL_W, CELL_H];
+              const elemY = LANE_H / 2 - h / 2;
+              const style = STYLES[el.type] || STYLES.userTask;
+              const timeLabel = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
+              xml += `<mxCell id="${esc(el.id)}" value="${esc(el.name)}${timeLabel}" style="${style}" vertex="1" parent="${laneId}"><mxGeometry x="${elemX}" y="${elemY}" width="${w}" height="${h}" as="geometry"/></mxCell>\n`;
+              elemX += w + ELEM_MARGIN;
+            });
+            laneY += LANE_H;
+          });
+          poolY += poolH + 40;
+        });
+      } else {
+        // Fallback: старый формат elements/flows
+        const CELL_W = 160, CELL_H = 70;
+        let x = 80;
+        (bpmnJson.elements||[]).forEach(el => {
+          const [w, h] = SIZES[el.type] || [CELL_W, CELL_H];
+          const style = STYLES[el.type] || STYLES.userTask;
+          const timeLabel = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
+          xml += `<mxCell id="${esc(el.id)}" value="${esc(el.name)}${timeLabel}" style="${style}" vertex="1" parent="1"><mxGeometry x="${x}" y="${200-h/2}" width="${w}" height="${h}" as="geometry"/></mxCell>\n`;
+          x += w + 40;
+        });
+      }
+
+      // Стрелки
+      (bpmnJson.flows||[]).forEach((fl, i) => {
+        const edgeId = `edge_${i}`;
+        xml += `<mxCell id="${edgeId}" value="${esc(fl.label||'')}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>\n`;
       });
 
       xml += '</root>\n</mxGraphModel>';
