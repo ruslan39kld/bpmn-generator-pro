@@ -1,30 +1,39 @@
-import express from 'express'
-import path from 'path'
-import { fileURLToPath } from 'url'
+'use strict'
+const express = require('express')
+const https   = require('https')
+const path    = require('path')
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const app  = express()
+const PORT = process.env.PORT || 80
 
-const app = express()
-app.use(express.json())
+app.use(express.json({ limit: '2mb' }))
 app.use(express.static(path.join(__dirname, 'dist')))
 
-app.post('/api/gigachat', async (req, res) => {
-  try {
-    const { apiKey, messages } = req.body
-    const response = await fetch('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model: 'GigaChat', messages, temperature: 0.1, max_tokens: 2000 }),
-    })
-    const data = await response.json()
-    res.json(data)
-  } catch (e) {
-    res.status(500).json({ error: e.message })
+app.post('/api/gigachat', (req, res) => {
+  const authHeader = req.headers['authorization'] || ''
+  const bodyStr    = JSON.stringify(req.body)
+  const options = {
+    hostname: 'gigachat.devices.sberbank.ru',
+    path: '/api/v1/chat/completions',
+    method: 'POST',
+    headers: {
+      'Authorization':  authHeader,
+      'Content-Type':   'application/json',
+      'Content-Length': Buffer.byteLength(bodyStr),
+    },
+    rejectUnauthorized: false
   }
+  const proxyReq = https.request(options, (proxyRes) => {
+    res.status(proxyRes.statusCode)
+    proxyRes.pipe(res, { end: true })
+  })
+  proxyReq.on('error', (e) => res.status(502).json({ error: e.message }))
+  proxyReq.write(bodyStr)
+  proxyReq.end()
 })
 
-app.listen(80, () => console.log('Server running on port 80'))
+app.get('*', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+)
+
+app.listen(PORT, () => console.log('BPMN Generator running on :' + PORT))
