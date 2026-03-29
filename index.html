@@ -10,7 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-  <script src="https://unpkg.com/bpmn-js@17/dist/bpmn-viewer.development.js"></script>
+  <script src="https://unpkg.com/bpmn-js@17/dist/bpmn-modeler.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -856,7 +856,7 @@
           <span class="badge">Ролей: —</span>
           <span class="badge">Время: — мин</span>
         </div>
-        <div id="bpmn-canvas"></div>
+        <div id="bpmn-canvas" style="width:100%;height:650px;border:1px solid #d0d7de;border-radius:8px;background:#fafafa;"></div>
         <div class="bottom-bar">
           <button class="btn-secondary" id="btnDownloadBpmn">Скачать BPMN</button>
           <button class="btn-secondary" id="btnDownloadSvg">Скачать SVG</button>
@@ -1087,7 +1087,7 @@
           body: JSON.stringify({
             model: 'GigaChat-Max',
             messages: [
-              { role: 'system', content: 'Ты эксперт-аналитик BPMN 2.0 с 10-летним опытом моделирования сложных бизнес-процессов уровня enterprise. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура JSON:\n{"pools":[{"id":"pool1","name":"Название пула/организации","lanes":[{"id":"lane1","name":"Роль/Должность исполнителя","elements":[{"id":"e1","name":"Краткое название до 5 слов","type":"startEvent|endEvent|userTask|serviceTask|exclusiveGateway|parallelGateway|intermediateEvent","time_min":5,"description":"Подробное описание действия"}]}]}],"flows":[{"id":"f1","from":"e1","to":"e2","label":"условие (Да/Нет/название)"}]}\n\nПравила профессионального BPMN 2.0:\n- Создавай МИНИМУМ 2-4 swimlane дорожки по ролям исполнителей\n- МИНИМУМ 12-20 элементов в процессе\n- Каждая роль — отдельная swimlane (Инициатор, Исполнитель, Система, Руководитель, Контролёр и т.д.)\n- exclusiveGateway — для условий (Да/Нет, Одобрено/Отклонено, Успешно/Ошибка)\n- parallelGateway — для параллельных действий\n- intermediateEvent — для ожиданий, таймеров, получения сообщений\n- serviceTask — для автоматических системных действий\n- userTask — для действий пользователя\n- Стрелки flows с подписями для всех шлюзов\n- Цикличные процессы (возвраты на доработку) обязательны\n- time_min — реалистичное время каждого шага\n- Названия на русском языке, кратко до 5 слов\n- ТОЛЬКО JSON без пояснений' },
+              { role: 'system', content: 'Ты эксперт BPMN 2.0. Верни ТОЛЬКО валидный JSON без markdown.\n\nСтруктура:\n{"pools":[{"id":"pool1","name":"Название организации","lanes":[{"id":"lane1","name":"Роль","elements":[{"id":"e1","name":"Название до 4 слов","type":"startEvent|endEvent|userTask|serviceTask|exclusiveGateway|parallelGateway","time_min":5}]}]}],"flows":[{"id":"f1","from":"e1","to":"e2","label":""}]}\n\nПравила:\n- ПЕРВЫЙ элемент каждого процесса ВСЕГДА type=startEvent\n- ПОСЛЕДНИЙ элемент ВСЕГДА type=endEvent\n- exclusiveGateway ВСЕГДА имеет минимум 2 исходящих стрелки с подписями (Да/Нет)\n- Стрелка "Нет" от шлюза идёт к элементу В ТОЙ ЖЕ lane что и шлюз — не в другую lane\n- Элементы второй lane связаны своими flows внутри lane\n- Названия на русском, кратко до 4 слов\n- ТОЛЬКО JSON' },
               { role: 'user', content: `Проанализируй бизнес-процесс и верни JSON:\n\n${textContent.slice(0, 6000)}` }
             ],
             temperature: 0.1,
@@ -1104,7 +1104,7 @@
         const bpmnXml = generateBPMNXML(window.currentBpmnData);
         window.currentBpmnXML = bpmnXml;
         if (!window.bpmnViewer) {
-          window.bpmnViewer = new BpmnJS({ container: '#bpmn-canvas' });
+          window.bpmnViewer = new BpmnModeler({ container: '#bpmn-canvas' });
         }
         try {
           await window.bpmnViewer.importXML(bpmnXml);
@@ -1204,6 +1204,16 @@
       const COL_W        = 220;
       const PAD_L        = 60;
 
+      const biocColor = {
+        startEvent:       'bioc:fill="#d5e8d4" bioc:stroke="#82b366"',
+        endEvent:         'bioc:fill="#f8cecc" bioc:stroke="#b85450"',
+        userTask:         'bioc:fill="#dae8fc" bioc:stroke="#6c8ebf"',
+        serviceTask:      'bioc:fill="#fff2cc" bioc:stroke="#d6b656"',
+        exclusiveGateway: 'bioc:fill="#fff2cc" bioc:stroke="#d6b656"',
+        parallelGateway:  'bioc:fill="#d5e8d4" bioc:stroke="#82b366"',
+      };
+      const colorAttr = type => biocColor[type] ? ' ' + biocColor[type] : '';
+
       const bpmnTag = {
         startEvent:         'startEvent',
         endEvent:           'endEvent',
@@ -1232,7 +1242,7 @@
           const tag = bpmnTag[el.type] || 'task';
           const [w, h] = sz[el.type] || [CELL_W, CELL_H];
           elXml   += `    <bpmn:${tag} id="${esc(el.id)}" name="${esc(el.name)}"/>\n`;
-          shapeXml += `      <bpmndi:BPMNShape id="shape_${el.id}" bpmnElement="${esc(el.id)}"${el.type==='exclusiveGateway' ? ' isMarkerVisible="true"' : ''}>\n`;
+          shapeXml += `      <bpmndi:BPMNShape id="shape_${el.id}" bpmnElement="${esc(el.id)}"${el.type==='exclusiveGateway' ? ' isMarkerVisible="true"' : ''}${colorAttr(el.type)}>\n`;
           shapeXml += `        <dc:Bounds x="${ex}" y="${Math.round(200 - h/2)}" width="${w}" height="${h}"/>\n`;
           shapeXml += `        <bpmndi:BPMNLabel/>\n`;
           shapeXml += `      </bpmndi:BPMNShape>\n`;
@@ -1251,7 +1261,7 @@
           }
         });
         return `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="definitions_0" targetNamespace="http://bpmn.io/schema/bpmn">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="definitions_0" targetNamespace="http://bpmn.io/schema/bpmn">
   <bpmn:process id="process_0" isExecutable="false">
 ${elXml}  </bpmn:process>
   <bpmndi:BPMNDiagram id="diagram_0">
@@ -1346,7 +1356,7 @@ ${shapeXml}${edgeXml}    </bpmndi:BPMNPlane>
           shapes += `        <dc:Bounds x="${POOL_X + POOL_LABEL_W}" y="${laneAbsY}" width="${poolW - POOL_LABEL_W}" height="${LANE_H}"/>\n`;
           shapes += `      </bpmndi:BPMNShape>\n`;
           elemLayouts.forEach(({ el, w, h, absX, absY: elAbsY }) => {
-            shapes += `      <bpmndi:BPMNShape id="shape_${el.id}" bpmnElement="${esc(el.id)}"${el.type === 'exclusiveGateway' ? ' isMarkerVisible="true"' : ''}>\n`;
+            shapes += `      <bpmndi:BPMNShape id="shape_${el.id}" bpmnElement="${esc(el.id)}"${el.type === 'exclusiveGateway' ? ' isMarkerVisible="true"' : ''}${colorAttr(el.type)}>\n`;
             shapes += `        <dc:Bounds x="${Math.round(absX)}" y="${Math.round(elAbsY)}" width="${w}" height="${h}"/>\n`;
             shapes += `        <bpmndi:BPMNLabel/>\n`;
             shapes += `      </bpmndi:BPMNShape>\n`;
@@ -1374,7 +1384,7 @@ ${shapeXml}${edgeXml}    </bpmndi:BPMNPlane>
       });
 
       return `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="definitions_0" targetNamespace="http://bpmn.io/schema/bpmn">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0" id="definitions_0" targetNamespace="http://bpmn.io/schema/bpmn">
   <bpmn:collaboration id="collaboration_0">
 ${participants}${messageFlows}  </bpmn:collaboration>
 ${processes}  <bpmndi:BPMNDiagram id="diagram_0">
