@@ -1186,30 +1186,22 @@
     function generateDrawioXML(bpmnJson, mode) {
       function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-      // ══════ КОНСТАНТЫ ══════════════════════════════════════════════
-      const POOL_X      = 30;    // отступ пула от левого края страницы
-      const POOL_Y      = 30;    // отступ пула от верхнего края
-      const POOL_HDR    = 30;    // высота заголовка пула (верхняя полоса с названием)
-      const LANE_LBL_W  = 30;    // ширина вертикальной подписи роли (узкая полоса слева)
-      const LANE_H      = 180;   // высота одной дорожки
-      const CELL_W      = 160;   // ширина блока задачи
-      const CELL_H      = 70;    // высота блока задачи
-      const GW          = 60;    // размер шлюза
-      const EV          = 46;    // диаметр события
-      const GAP_X       = 40;    // горизонтальный зазор между элементами
-      const PAD_L       = 40;    // отступ первого элемента от левого края content-области
+      const LANE_H  = 180;
+      const CELL_W  = 160;
+      const CELL_H  = 70;
+      const GW_S    = 60;
+      const EV_S    = 46;
+      const COL_W   = 200;  // шаг между колонками
+      const PAD_L   = 60;   // отступ первого элемента от левого края lane
+      const LBL_W   = 30;   // ширина вертикальной подписи дорожки
+      const POOL_H  = 30;   // высота заголовка пула
 
-      const SIZES = {
-        startEvent:        [EV,      EV],
-        endEvent:          [EV,      EV],
-        intermediateEvent: [EV - 6,  EV - 6],
-        userTask:          [CELL_W,  CELL_H],
-        serviceTask:       [CELL_W,  CELL_H],
-        exclusiveGateway:  [GW,      GW],
-        parallelGateway:   [GW,      GW],
+      const SZ = {
+        startEvent:[EV_S,EV_S], endEvent:[EV_S,EV_S], intermediateEvent:[40,40],
+        userTask:[CELL_W,CELL_H], serviceTask:[CELL_W,CELL_H],
+        exclusiveGateway:[GW_S,GW_S], parallelGateway:[GW_S,GW_S],
       };
-
-      const STYLES = {
+      const ST = {
         startEvent:        'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=10;',
         endEvent:          'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;fontSize=10;',
         intermediateEvent: 'ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;fontSize=10;',
@@ -1219,8 +1211,8 @@
         parallelGateway:   'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=10;verticalAlign=middle;',
       };
 
-      // Карта элемент -> абсолютная позиция (для расчёта waypoints)
-      const absPos = {};   // { id: {x, y, w, h, cx, cy, laneIdx} }
+      // Карта id -> абсолютные координаты (для waypoints)
+      const abs = {};
 
       let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
@@ -1229,126 +1221,101 @@
 <mxCell id="1" parent="0"/>
 `;
 
-      // ══════ ФОРМАТ С POOLS/LANES ═══════════════════════════════════
       if (bpmnJson.pools) {
-        let curPoolY = POOL_Y;
+        let poolAbsY = 30;
 
         bpmnJson.pools.forEach((pool, pi) => {
           const lanes   = pool.lanes || [];
-          const maxElem = Math.max(...lanes.map(l => (l.elements||[]).length), 1);
+          const maxCols = Math.max(...lanes.map(l => (l.elements||[]).length), 1);
+          const poolW   = LBL_W + PAD_L + maxCols * COL_W;
+          const poolH   = POOL_H + lanes.length * LANE_H;
+          const poolId  = `pool_${pi}`;
 
-          // Ширина контентной области (без подписи роли)
-          const contentW = PAD_L + maxElem * (CELL_W + GAP_X) + GAP_X;
-          const poolW    = LANE_LBL_W + contentW;
-          const poolH    = POOL_HDR + lanes.length * LANE_H;
-          const poolId   = `pool_${pi}`;
-
-          // ── Pool ──────────────────────────────────────────────────
-          xml += `<mxCell id="${poolId}" value="${esc(pool.name)}" `
-               + `style="shape=pool;startSize=${POOL_HDR};horizontal=1;`
-               + `childLayout=stackLayout;horizontalStack=0;`
-               + `resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;`
-               + `swimlaneHead=0;fillColor=#f5f5f5;strokeColor=#555555;`
-               + `fontColor=#333333;fontStyle=1;fontSize=14;" `
-               + `vertex="1" parent="1">`
-               + `<mxGeometry x="${POOL_X}" y="${curPoolY}" width="${poolW}" height="${poolH}" as="geometry"/>`
-               + `</mxCell>\n`;
-
-          // Абсолютный Y верхнего края pool-контента (учитываем заголовок)
-          const poolAbsY = curPoolY + POOL_HDR;
+          // ── Pool (swimlane с заголовком) ─────────────────────────
+          xml += `<mxCell id="${poolId}" value="${esc(pool.name)}" style="shape=pool;startSize=${POOL_H};horizontal=1;childLayout=stackLayout;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=0;marginBottom=0;swimlaneHead=0;fillColor=#f5f5f5;strokeColor=#555555;fontColor=#333333;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+  <mxGeometry x="30" y="${poolAbsY}" width="${poolW}" height="${poolH}" as="geometry"/>
+</mxCell>\n`;
 
           lanes.forEach((lane, li) => {
             const laneId  = `lane_${pi}_${li}`;
             const elems   = lane.elements || [];
-            const laneAbsY = poolAbsY + li * LANE_H;
 
-            // ── Swimlane: подпись роли — ВЕРТИКАЛЬНЫЙ текст слева ──
-            xml += `<mxCell id="${laneId}" value="${esc(lane.name)}" `
-                 + `style="swimlane;startSize=${LANE_LBL_W};horizontal=0;`
-                 + `fillColor=#eef4ff;strokeColor=#9ab4d8;`
-                 + `fontStyle=1;fontSize=12;fontColor=#1a3a5c;`
-                 + `verticalAlign=middle;align=center;" `
-                 + `vertex="1" parent="${poolId}">`
-                 + `<mxGeometry x="0" y="${POOL_HDR + li * LANE_H}" width="${poolW}" height="${LANE_H}" as="geometry"/>`
-                 + `</mxCell>\n`;
+            // ── Lane (horizontal=0 = вертикальная подпись слева) ──
+            xml += `<mxCell id="${laneId}" value="${esc(lane.name)}" style="swimlane;startSize=${LBL_W};horizontal=0;fillColor=#eef4ff;strokeColor=#9ab4d8;fontStyle=1;fontSize=12;fontColor=#1a3a5c;" vertex="1" parent="${poolId}">
+  <mxGeometry x="0" y="${POOL_H + li * LANE_H}" width="${poolW}" height="${LANE_H}" as="geometry"/>
+</mxCell>\n`;
 
-            // ── Элементы ──────────────────────────────────────────
+            // ── Элементы внутри lane ───────────────────────────────
             elems.forEach((el, ei) => {
-              const [w, h] = SIZES[el.type] || [CELL_W, CELL_H];
-              // X внутри lane: после подписи роли + отступ + позиция колонки
-              const relX = LANE_LBL_W + PAD_L + ei * (CELL_W + GAP_X) + (CELL_W - w) / 2;
+              const [w, h] = SZ[el.type] || [CELL_W, CELL_H];
+              // Координаты ОТНОСИТЕЛЬНО lane
+              const relX = LBL_W + PAD_L + ei * COL_W + (CELL_W - w) / 2;
               const relY = (LANE_H - h) / 2;
+              const style = ST[el.type] || ST.userTask;
+              const time  = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
 
-              // Абсолютные координаты центра элемента (для waypoints)
-              const absX  = POOL_X + relX;
-              const absY  = laneAbsY + relY;
-              absPos[el.id] = {
-                x: Math.round(absX),
-                y: Math.round(absY),
+              // Абсолютные координаты для waypoints
+              abs[el.id] = {
+                ax: 30 + relX,
+                ay: poolAbsY + POOL_H + li * LANE_H + relY,
                 w, h,
-                cx: Math.round(absX + w / 2),
-                cy: Math.round(absY + h / 2),
+                cx: 30 + relX + w / 2,
+                cy: poolAbsY + POOL_H + li * LANE_H + relY + h / 2,
                 laneIdx: li,
-                colIdx: ei,
               };
 
-              const style    = STYLES[el.type] || STYLES.userTask;
-              const timeLbl  = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
-              xml += `<mxCell id="${el.id}" value="${esc(el.name)}${timeLbl}" `
-                   + `style="${style}" vertex="1" parent="${laneId}">`
-                   + `<mxGeometry x="${Math.round(relX)}" y="${Math.round(relY)}" width="${w}" height="${h}" as="geometry"/>`
-                   + `</mxCell>\n`;
+              xml += `<mxCell id="${el.id}" value="${esc(el.name)}${time}" style="${style}" vertex="1" parent="${laneId}">
+  <mxGeometry x="${Math.round(relX)}" y="${Math.round(relY)}" width="${w}" height="${h}" as="geometry"/>
+</mxCell>\n`;
             });
           });
 
-          // ── Стрелки с обходом блоков ──────────────────────────────
+          // ── Стрелки ───────────────────────────────────────────────
+          // parent="1" (корневой) — draw.io корректно находит элементы
+          // в любых вложенных контейнерах если edge в корневом слое
           (bpmnJson.flows || []).forEach((fl, fi) => {
-            const src = absPos[fl.from];
-            const tgt = absPos[fl.to];
+            const src = abs[fl.from];
+            const tgt = abs[fl.to];
             const lbl = fl.label ? esc(fl.label) : '';
 
-            let pointsXml = '';
+            let geomInner = '';
+
             if (src && tgt && src.laneIdx !== tgt.laneIdx) {
-              // Средний X коридора между колонкой источника и следующей
-              const corridorX = Math.round(src.x + src.w + GAP_X / 2);
-              pointsXml = `<Array as="points">`
-                        + `<mxPoint x="${corridorX}" y="${src.cy}"/>`
-                        + `<mxPoint x="${corridorX}" y="${tgt.cy}"/>`
-                        + `</Array>`;
+              // Стрелка между разными дорожками:
+              // идёт вправо от источника → вертикально в коридоре → входит в цель слева
+              const corridorX = Math.round(src.cx + src.w / 2 + 20);
+              geomInner = `
+    <Array as="points">
+      <mxPoint x="${corridorX}" y="${Math.round(src.cy)}"/>
+      <mxPoint x="${corridorX}" y="${Math.round(tgt.cy)}"/>
+    </Array>`;
             }
 
-            xml += `<mxCell id="e_${pi}_${fi}" value="${lbl}" `
-                 + `style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;`
-                 + `jettySize=auto;html=1;strokeWidth=2;fontSize=10;`
-                 + `labelBackgroundColor=#ffffff;`
-                 + `exitX=1;exitY=0.5;exitDx=0;exitDy=0;`
-                 + `entryX=0;entryY=0.5;entryDx=0;entryDy=0;" `
-                 + `edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">`
-                 + `<mxGeometry relative="1" as="geometry">${pointsXml}</mxGeometry>`
-                 + `</mxCell>\n`;
+            xml += `<mxCell id="e_${pi}_${fi}" value="${lbl}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">
+  <mxGeometry relative="1" as="geometry">${geomInner}
+  </mxGeometry>
+</mxCell>\n`;
           });
 
-          curPoolY += poolH + 50;
+          poolAbsY += poolH + 50;
         });
 
-      // ══════ FALLBACK: плоский список ═══════════════════════════════
       } else {
+        // ── Fallback: плоский список ──────────────────────────────
         let x = 80;
         (bpmnJson.elements || []).forEach(el => {
-          const [w, h] = SIZES[el.type] || [CELL_W, CELL_H];
-          const style  = STYLES[el.type] || STYLES.userTask;
-          const tLbl   = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
-          xml += `<mxCell id="${el.id}" value="${esc(el.name)}${tLbl}" style="${style}" vertex="1" parent="1">`
-               + `<mxGeometry x="${x}" y="${200 - h/2}" width="${w}" height="${h}" as="geometry"/>`
-               + `</mxCell>\n`;
-          x += w + GAP_X;
+          const [w, h] = SZ[el.type] || [CELL_W, CELL_H];
+          const style  = ST[el.type] || ST.userTask;
+          const time   = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
+          xml += `<mxCell id="${el.id}" value="${esc(el.name)}${time}" style="${style}" vertex="1" parent="1">
+  <mxGeometry x="${x}" y="${Math.round(200 - h/2)}" width="${w}" height="${h}" as="geometry"/>
+</mxCell>\n`;
+          x += w + 60;
         });
         (bpmnJson.flows || []).forEach((fl, i) => {
-          xml += `<mxCell id="e_${i}" value="${fl.label ? esc(fl.label) : ''}" `
-               + `style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;fontSize=10;" `
-               + `edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">`
-               + `<mxGeometry relative="1" as="geometry"/>`
-               + `</mxCell>\n`;
+          xml += `<mxCell id="e_${i}" value="${fl.label ? esc(fl.label) : ''}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;fontSize=10;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">
+  <mxGeometry relative="1" as="geometry"/>
+</mxCell>\n`;
         });
       }
 
