@@ -1186,12 +1186,12 @@
     function generateDrawioXML(bpmnJson, mode) {
       function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-      const LANE_H  = 180;
+      const LANE_H  = 200;
       const CELL_W  = 160;
       const CELL_H  = 70;
       const GW_S    = 60;
       const EV_S    = 46;
-      const COL_W   = 200;  // шаг между колонками
+      const COL_W   = 220;  // шаг между колонками
       const PAD_L   = 60;   // отступ первого элемента от левого края lane
       const LBL_W   = 30;   // ширина вертикальной подписи дорожки
       const POOL_H  = 30;   // высота заголовка пула
@@ -1211,8 +1211,6 @@
         parallelGateway:   'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=10;verticalAlign=middle;',
       };
 
-      // Карта id -> абсолютные координаты (для waypoints)
-      const abs = {};
 
       let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
@@ -1254,16 +1252,6 @@
               const style = ST[el.type] || ST.userTask;
               const time  = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
 
-              // Абсолютные координаты для waypoints
-              abs[el.id] = {
-                ax: 30 + relX,
-                ay: poolAbsY + POOL_H + li * LANE_H + relY,
-                w, h,
-                cx: 30 + relX + w / 2,
-                cy: poolAbsY + POOL_H + li * LANE_H + relY + h / 2,
-                laneIdx: li,
-              };
-
               xml += `<mxCell id="${el.id}" value="${esc(el.name)}${time}" style="${style}" vertex="1" parent="${laneId}">
   <mxGeometry x="${Math.round(relX)}" y="${Math.round(relY)}" width="${w}" height="${h}" as="geometry"/>
 </mxCell>\n`;
@@ -1274,26 +1262,9 @@
           // parent="1" (корневой) — draw.io корректно находит элементы
           // в любых вложенных контейнерах если edge в корневом слое
           (bpmnJson.flows || []).forEach((fl, fi) => {
-            const src = abs[fl.from];
-            const tgt = abs[fl.to];
             const lbl = fl.label ? esc(fl.label) : '';
-
-            let geomInner = '';
-
-            if (src && tgt && src.laneIdx !== tgt.laneIdx) {
-              // Стрелка между разными дорожками:
-              // идёт вправо от источника → вертикально в коридоре → входит в цель слева
-              const corridorX = Math.round(src.cx + src.w / 2 + 20);
-              geomInner = `
-    <Array as="points">
-      <mxPoint x="${corridorX}" y="${Math.round(src.cy)}"/>
-      <mxPoint x="${corridorX}" y="${Math.round(tgt.cy)}"/>
-    </Array>`;
-            }
-
-            xml += `<mxCell id="e_${pi}_${fi}" value="${lbl}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">
-  <mxGeometry relative="1" as="geometry">${geomInner}
-  </mxGeometry>
+            xml += `<mxCell id="e_${pi}_${fi}" value="${lbl}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">
+  <mxGeometry relative="1" as="geometry"/>
 </mxCell>\n`;
           });
 
