@@ -10,6 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+  <script src="https://unpkg.com/bpmn-js@17/dist/bpmn-viewer.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -378,17 +379,15 @@
       color: var(--text);
     }
 
-    #xmlOutput {
+    #bpmn-canvas {
       flex: 1;
       border: none;
-      border-radius: 0;
-      background-color: var(--surface);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      padding: 24px;
-      color: var(--text);
-      resize: none;
-      line-height: 1.5;
+      background-color: #fafafa;
+      overflow: hidden;
+    }
+    #bpmn-canvas .djs-container svg {
+      width: 100%;
+      height: 100%;
     }
 
     .bottom-bar {
@@ -857,11 +856,10 @@
           <span class="badge">Ролей: —</span>
           <span class="badge">Время: — мин</span>
         </div>
-        <textarea id="xmlOutput" readonly></textarea>
+        <div id="bpmn-canvas"></div>
         <div class="bottom-bar">
-          <button class="btn-secondary">Открыть в draw.io</button>
-          <button class="btn-secondary">Скопировать XML</button>
-          <button class="btn-secondary">Скачать .drawio</button>
+          <button class="btn-secondary" id="btnDownloadBpmn">Скачать BPMN</button>
+          <button class="btn-secondary" id="btnDownloadSvg">Скачать SVG</button>
         </div>
       </div>
 
@@ -1050,7 +1048,6 @@
 
     const btnGenerate = document.getElementById('btnGenerate');
     const textArea = document.querySelector('textarea[placeholder^="Вставь текст"]');
-    const xmlOutput = document.getElementById('xmlOutput');
 
     btnGenerate.addEventListener('click', async () => {
       const apiKey = getApiKey();
@@ -1104,8 +1101,18 @@
         const cleaned = gigaContent.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
         window.currentBpmnData = JSON.parse(cleaned);
 
-        xmlOutput.value = generateDrawioXML(window.currentBpmnData);
-        log('OK', 'BPMN успешно сгенерирован');
+        const bpmnXml = generateBPMNXML(window.currentBpmnData);
+        window.currentBpmnXML = bpmnXml;
+        if (!window.bpmnViewer) {
+          window.bpmnViewer = new BpmnJS({ container: '#bpmn-canvas' });
+        }
+        try {
+          await window.bpmnViewer.importXML(bpmnXml);
+          window.bpmnViewer.get('canvas').zoom('fit-viewport');
+          log('OK', 'BPMN успешно сгенерирован и отображён');
+        } catch (renderErr) {
+          log('ERROR', 'Ошибка рендеринга BPMN: ' + renderErr.message);
+        }
         
         // Update counters
         const allElements = window.currentBpmnData.pools
@@ -1183,15 +1190,209 @@
 
     // --- ЭТАП 3: АНИМАЦИЯ, РУКОВОДСТВО, ЭКСПОРТ ---
 
+    function generateBPMNXML(bpmnJson) {
+      const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+      const POOL_X       = 160;
+      const POOL_LABEL_W = 30;
+      const LANE_LABEL_W = 30;
+      const LANE_H       = 200;
+      const CELL_W       = 160;
+      const CELL_H       = 70;
+      const GW_S         = 60;
+      const EV_S         = 46;
+      const COL_W        = 220;
+      const PAD_L        = 60;
+
+      const bpmnTag = {
+        startEvent:         'startEvent',
+        endEvent:           'endEvent',
+        userTask:           'userTask',
+        serviceTask:        'serviceTask',
+        exclusiveGateway:   'exclusiveGateway',
+        parallelGateway:    'parallelGateway',
+        intermediateEvent:  'intermediateThrowEvent',
+      };
+      const sz = {
+        startEvent:[EV_S,EV_S], endEvent:[EV_S,EV_S], intermediateEvent:[40,40],
+        userTask:[CELL_W,CELL_H], serviceTask:[CELL_W,CELL_H],
+        exclusiveGateway:[GW_S,GW_S], parallelGateway:[GW_S,GW_S],
+      };
+
+      const pools = bpmnJson.pools || [];
+      const flows = bpmnJson.flows || [];
+
+      // Fallback: no pools — single flat process
+      if (!pools.length) {
+        const elements = bpmnJson.elements || [];
+        let elXml = '', shapeXml = '', edgeXml = '';
+        const posMap = {};
+        let ex = 200;
+        elements.forEach(el => {
+          const tag = bpmnTag[el.type] || 'task';
+          const [w, h] = sz[el.type] || [CELL_W, CELL_H];
+          elXml   += `    <bpmn:${tag} id="${esc(el.id)}" name="${esc(el.name)}"/>\n`;
+          shapeXml += `      <bpmndi:BPMNShape id="shape_${el.id}" bpmnElement="${esc(el.id)}"${el.type==='exclusiveGateway' ? ' isMarkerVisible="true"' : ''}>\n`;
+          shapeXml += `        <dc:Bounds x="${ex}" y="${Math.round(200 - h/2)}" width="${w}" height="${h}"/>\n`;
+          shapeXml += `        <bpmndi:BPMNLabel/>\n`;
+          shapeXml += `      </bpmndi:BPMNShape>\n`;
+          posMap[el.id] = { cx: ex + w/2, cy: 200, w, h };
+          ex += w + 60;
+        });
+        flows.forEach((fl, fi) => {
+          const fid = esc(fl.id || `f_${fi}`);
+          elXml += `    <bpmn:sequenceFlow id="${fid}"${fl.label ? ` name="${esc(fl.label)}"` : ''} sourceRef="${esc(fl.from)}" targetRef="${esc(fl.to)}"/>\n`;
+          const s = posMap[fl.from], t = posMap[fl.to];
+          if (s && t) {
+            edgeXml += `      <bpmndi:BPMNEdge id="edge_${fi}" bpmnElement="${fid}">\n`;
+            edgeXml += `        <di:waypoint x="${Math.round(s.cx + s.w/2)}" y="${Math.round(s.cy)}"/>\n`;
+            edgeXml += `        <di:waypoint x="${Math.round(t.cx - t.w/2)}" y="${Math.round(t.cy)}"/>\n`;
+            edgeXml += `      </bpmndi:BPMNEdge>\n`;
+          }
+        });
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="definitions_0" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="process_0" isExecutable="false">
+${elXml}  </bpmn:process>
+  <bpmndi:BPMNDiagram id="diagram_0">
+    <bpmndi:BPMNPlane id="plane_0" bpmnElement="process_0">
+${shapeXml}${edgeXml}    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+      }
+
+      // Build element → process index
+      const elemToProc = {};
+      pools.forEach((pool, pi) => {
+        (pool.lanes || []).forEach(lane => {
+          (lane.elements || []).forEach(el => { elemToProc[el.id] = pi; });
+        });
+      });
+
+      // Layout
+      const posMap = {};
+      const poolLayouts = [];
+      let curY = 80;
+      pools.forEach((pool, pi) => {
+        const lanes   = pool.lanes || [];
+        const maxCols = Math.max(...lanes.map(l => (l.elements||[]).length), 1);
+        const poolW   = POOL_LABEL_W + LANE_LABEL_W + PAD_L + maxCols * COL_W;
+        const poolH   = lanes.length * LANE_H;
+        const laneLayouts = lanes.map((lane, li) => {
+          const elems = lane.elements || [];
+          const elemLayouts = elems.map((el, ei) => {
+            const [w, h] = sz[el.type] || [CELL_W, CELL_H];
+            const absX = POOL_X + POOL_LABEL_W + LANE_LABEL_W + PAD_L + ei * COL_W + (CELL_W - w) / 2;
+            const absY = curY + li * LANE_H + (LANE_H - h) / 2;
+            posMap[el.id] = { cx: absX + w/2, cy: absY + h/2, w, h };
+            return { el, w, h, absX, absY };
+          });
+          return { lane, li, elemLayouts, absY: curY + li * LANE_H };
+        });
+        poolLayouts.push({ pool, pi, poolW, poolH, absY: curY, laneLayouts });
+        curY += poolH + 50;
+      });
+
+      // Build XML parts
+      let participants = '', processes = '', messageFlows = '', shapes = '', edges = '';
+
+      poolLayouts.forEach(({ pool, pi, poolW, poolH, absY, laneLayouts }) => {
+        const procId = `process_${pi}`;
+        const partId = `participant_${pi}`;
+
+        participants += `    <bpmn:participant id="${partId}" name="${esc(pool.name)}" processRef="${procId}"/>\n`;
+
+        // LaneSet
+        let laneSetXml = `    <bpmn:laneSet id="laneSet_${pi}">\n`;
+        laneLayouts.forEach(({ lane, li, elemLayouts }) => {
+          const laneId = `lane_${pi}_${li}`;
+          laneSetXml += `      <bpmn:lane id="${laneId}" name="${esc(lane.name)}">\n`;
+          elemLayouts.forEach(({ el }) => {
+            laneSetXml += `        <bpmn:flowNodeRef>${esc(el.id)}</bpmn:flowNodeRef>\n`;
+          });
+          laneSetXml += `      </bpmn:lane>\n`;
+        });
+        laneSetXml += `    </bpmn:laneSet>\n`;
+
+        // Elements
+        let elemsXml = '';
+        laneLayouts.forEach(({ elemLayouts }) => {
+          elemLayouts.forEach(({ el }) => {
+            const tag = bpmnTag[el.type] || 'task';
+            elemsXml += `    <bpmn:${tag} id="${esc(el.id)}" name="${esc(el.name)}"/>\n`;
+          });
+        });
+
+        // Sequence flows (intra-pool)
+        let seqFlowsXml = '';
+        flows.forEach((fl, fi) => {
+          if (elemToProc[fl.from] === pi && elemToProc[fl.to] === pi) {
+            const fid = esc(fl.id || `f_${pi}_${fi}`);
+            seqFlowsXml += `    <bpmn:sequenceFlow id="${fid}"${fl.label ? ` name="${esc(fl.label)}"` : ''} sourceRef="${esc(fl.from)}" targetRef="${esc(fl.to)}"/>\n`;
+          }
+        });
+
+        processes += `  <bpmn:process id="${procId}" isExecutable="false">\n${laneSetXml}${elemsXml}${seqFlowsXml}  </bpmn:process>\n`;
+
+        // Participant shape
+        shapes += `      <bpmndi:BPMNShape id="shape_${partId}" bpmnElement="${partId}" isHorizontal="true">\n`;
+        shapes += `        <dc:Bounds x="${POOL_X}" y="${absY}" width="${poolW}" height="${poolH}"/>\n`;
+        shapes += `      </bpmndi:BPMNShape>\n`;
+
+        // Lane shapes
+        laneLayouts.forEach(({ lane, li, elemLayouts, absY: laneAbsY }) => {
+          const laneId = `lane_${pi}_${li}`;
+          shapes += `      <bpmndi:BPMNShape id="shape_${laneId}" bpmnElement="${laneId}" isHorizontal="true">\n`;
+          shapes += `        <dc:Bounds x="${POOL_X + POOL_LABEL_W}" y="${laneAbsY}" width="${poolW - POOL_LABEL_W}" height="${LANE_H}"/>\n`;
+          shapes += `      </bpmndi:BPMNShape>\n`;
+          elemLayouts.forEach(({ el, w, h, absX, absY: elAbsY }) => {
+            shapes += `      <bpmndi:BPMNShape id="shape_${el.id}" bpmnElement="${esc(el.id)}"${el.type === 'exclusiveGateway' ? ' isMarkerVisible="true"' : ''}>\n`;
+            shapes += `        <dc:Bounds x="${Math.round(absX)}" y="${Math.round(elAbsY)}" width="${w}" height="${h}"/>\n`;
+            shapes += `        <bpmndi:BPMNLabel/>\n`;
+            shapes += `      </bpmndi:BPMNShape>\n`;
+          });
+        });
+      });
+
+      // Message flows (cross-pool) + all edge waypoints
+      flows.forEach((fl, fi) => {
+        const srcProc = elemToProc[fl.from];
+        const tgtProc = elemToProc[fl.to];
+        const fid = esc(fl.id || `f_${fi}`);
+
+        if (srcProc !== undefined && tgtProc !== undefined && srcProc !== tgtProc) {
+          messageFlows += `    <bpmn:messageFlow id="${fid}"${fl.label ? ` name="${esc(fl.label)}"` : ''} sourceRef="${esc(fl.from)}" targetRef="${esc(fl.to)}"/>\n`;
+        }
+
+        const s = posMap[fl.from], t = posMap[fl.to];
+        if (s && t) {
+          edges += `      <bpmndi:BPMNEdge id="edge_${fi}" bpmnElement="${fid}">\n`;
+          edges += `        <di:waypoint x="${Math.round(s.cx + s.w/2)}" y="${Math.round(s.cy)}"/>\n`;
+          edges += `        <di:waypoint x="${Math.round(t.cx - t.w/2)}" y="${Math.round(t.cy)}"/>\n`;
+          edges += `      </bpmndi:BPMNEdge>\n`;
+        }
+      });
+
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="definitions_0" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="collaboration_0">
+${participants}${messageFlows}  </bpmn:collaboration>
+${processes}  <bpmndi:BPMNDiagram id="diagram_0">
+    <bpmndi:BPMNPlane id="plane_0" bpmnElement="collaboration_0">
+${shapes}${edges}    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+    }
+
     function generateDrawioXML(bpmnJson, mode) {
       function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-      const LANE_H  = 180;
+      const LANE_H  = 200;
       const CELL_W  = 160;
       const CELL_H  = 70;
       const GW_S    = 60;
       const EV_S    = 46;
-      const COL_W   = 200;  // шаг между колонками
+      const COL_W   = 220;  // шаг между колонками
       const PAD_L   = 60;   // отступ первого элемента от левого края lane
       const LBL_W   = 30;   // ширина вертикальной подписи дорожки
       const POOL_H  = 30;   // высота заголовка пула
@@ -1211,8 +1412,6 @@
         parallelGateway:   'rhombus;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=10;verticalAlign=middle;',
       };
 
-      // Карта id -> абсолютные координаты (для waypoints)
-      const abs = {};
 
       let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
@@ -1254,16 +1453,6 @@
               const style = ST[el.type] || ST.userTask;
               const time  = el.time_min > 0 ? `&#xa;⏱ ${el.time_min} мин` : '';
 
-              // Абсолютные координаты для waypoints
-              abs[el.id] = {
-                ax: 30 + relX,
-                ay: poolAbsY + POOL_H + li * LANE_H + relY,
-                w, h,
-                cx: 30 + relX + w / 2,
-                cy: poolAbsY + POOL_H + li * LANE_H + relY + h / 2,
-                laneIdx: li,
-              };
-
               xml += `<mxCell id="${el.id}" value="${esc(el.name)}${time}" style="${style}" vertex="1" parent="${laneId}">
   <mxGeometry x="${Math.round(relX)}" y="${Math.round(relY)}" width="${w}" height="${h}" as="geometry"/>
 </mxCell>\n`;
@@ -1274,26 +1463,9 @@
           // parent="1" (корневой) — draw.io корректно находит элементы
           // в любых вложенных контейнерах если edge в корневом слое
           (bpmnJson.flows || []).forEach((fl, fi) => {
-            const src = abs[fl.from];
-            const tgt = abs[fl.to];
             const lbl = fl.label ? esc(fl.label) : '';
-
-            let geomInner = '';
-
-            if (src && tgt && src.laneIdx !== tgt.laneIdx) {
-              // Стрелка между разными дорожками:
-              // идёт вправо от источника → вертикально в коридоре → входит в цель слева
-              const corridorX = Math.round(src.cx + src.w / 2 + 20);
-              geomInner = `
-    <Array as="points">
-      <mxPoint x="${corridorX}" y="${Math.round(src.cy)}"/>
-      <mxPoint x="${corridorX}" y="${Math.round(tgt.cy)}"/>
-    </Array>`;
-            }
-
-            xml += `<mxCell id="e_${pi}_${fi}" value="${lbl}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">
-  <mxGeometry relative="1" as="geometry">${geomInner}
-  </mxGeometry>
+            xml += `<mxCell id="e_${pi}_${fi}" value="${lbl}" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" source="${esc(fl.from)}" target="${esc(fl.to)}" parent="1">
+  <mxGeometry relative="1" as="geometry"/>
 </mxCell>\n`;
           });
 
@@ -1521,42 +1693,45 @@
       });
     }
 
-    // Draw.io Integration
+    // Draw.io Integration (used by Compare tab buttons)
     function openInDrawIo(mode = 'asis') {
-      let xml = xmlOutput.value;
-      if (window.currentBpmnData) {
-        xml = generateDrawioXML(window.currentBpmnData, mode);
-      }
-      if (!xml) {
-        log('ERROR', 'Нет XML для открытия в draw.io');
+      if (!window.currentBpmnData) {
+        log('ERROR', 'Нет данных для открытия в draw.io');
         return;
       }
+      const xml = generateDrawioXML(window.currentBpmnData, mode);
       const url = generateDrawioUrl(xml);
       window.open(url, '_blank');
       log('INFO', 'Открыто в draw.io');
     }
 
-    document.querySelectorAll('.btn-secondary').forEach(btn => {
-      if (btn.textContent.includes('Открыть в draw.io') && !btn.hasAttribute('onclick')) {
-        btn.addEventListener('click', () => openInDrawIo('asis'));
-      }
-      if (btn.textContent.includes('Скопировать XML')) {
-        btn.addEventListener('click', () => {
-          navigator.clipboard.writeText(xmlOutput.value);
-          log('OK', 'XML скопирован в буфер обмена');
-        });
-      }
-      if (btn.textContent.includes('Скачать .drawio')) {
-        btn.addEventListener('click', () => {
-          const blob = new Blob([xmlOutput.value], {type: 'application/xml'});
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'process.drawio';
-          a.click();
-          URL.revokeObjectURL(url);
-          log('OK', 'Файл .drawio скачан');
-        });
+    // BPMN export buttons
+    document.getElementById('btnDownloadBpmn').addEventListener('click', () => {
+      if (!window.currentBpmnXML) { log('ERROR', 'Нет данных для экспорта'); return; }
+      const blob = new Blob([window.currentBpmnXML], { type: 'application/xml' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'process.bpmn';
+      a.click();
+      URL.revokeObjectURL(url);
+      log('OK', 'Файл .bpmn скачан');
+    });
+
+    document.getElementById('btnDownloadSvg').addEventListener('click', async () => {
+      if (!window.bpmnViewer) { log('ERROR', 'Нет диаграммы для экспорта'); return; }
+      try {
+        const { svg } = await window.bpmnViewer.saveSVG();
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'process.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+        log('OK', 'SVG скачан');
+      } catch (e) {
+        log('ERROR', 'Ошибка экспорта SVG: ' + e.message);
       }
     });
 
