@@ -394,6 +394,72 @@
     .djs-palette {
       display: none !important;
     }
+    #editBtn {
+      margin: 8px 24px 0;
+      padding: 6px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text);
+    }
+    #editBtn:hover { background: var(--border); }
+    #editorPanel {
+      margin: 10px 24px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #editorPanel table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    #editorPanel th {
+      background: var(--surface2);
+      padding: 6px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    #editorPanel td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    #editorPanel input, #editorPanel select {
+      padding: 3px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 12px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    #editorPanel input { width: 200px; }
+    .editor-actions {
+      padding: 8px 12px;
+      display: flex;
+      gap: 8px;
+      background: var(--surface2);
+    }
+    .editor-actions button {
+      padding: 5px 12px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 12px;
+      background: var(--surface);
+      color: var(--text);
+    }
+    .editor-actions button:hover { background: var(--border); }
+    .ed-del-btn {
+      background: none !important;
+      border: none !important;
+      color: var(--danger);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px !important;
+    }
 
     .bottom-bar {
       padding: 16px 24px;
@@ -863,6 +929,24 @@
           <span class="badge">Время: — мин</span>
         </div>
         <div id="bpmn-canvas" style="width:100%;height:650px;border:1px solid #d0d7de;border-radius:8px;background:#fafafa;"></div>
+        <button id="editBtn" onclick="toggleEditor()">✏️ Редактировать</button>
+        <div id="editorPanel" style="display:none;">
+          <table id="elementsTable">
+            <thead>
+              <tr>
+                <th>Дорожка</th>
+                <th>Название шага</th>
+                <th>Тип</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div class="editor-actions">
+            <button onclick="addElement()">+ Добавить шаг</button>
+            <button onclick="applyEdits()">✅ Применить</button>
+          </div>
+        </div>
         <div class="bottom-bar">
           <button class="btn-secondary" id="btnDownloadBpmn">Скачать BPMN</button>
           <button class="btn-secondary" id="btnDownloadSvg">Скачать SVG</button>
@@ -1093,7 +1177,7 @@
           body: JSON.stringify({
             model: 'GigaChat-Max',
             messages: [
-              { role: 'system', content: 'Ты аналитик BPMN 2.0. Верни ТОЛЬКО валидный JSON без markdown, без пояснений.\n\nГЛАВНОЕ ПРАВИЛО: читай документ дословно. Каждое упомянутое действие = отдельный элемент. НЕ объединяй шаги. НЕ пропускай шаги. НЕ придумывай шаги которых нет в тексте.\n\nСТРУКТУРА JSON (строго соблюдай):\n{"pools":[{"id":"pool1","name":"Название процесса из документа","lanes":[{"id":"lane1","name":"Роль 1 — кто выполняет действие (человек/должность)","elements":[{"id":"e1","name":"Точное действие из текста","type":"startEvent","time_min":1}]},{"id":"lane2","name":"Роль 2 — система или другой участник","elements":[{"id":"e5","name":"Автоматическое действие системы","type":"serviceTask","time_min":1}]}]}],"flows":[{"id":"f1","from":"e1","to":"e2","label":""}]}\n\nКАК ОПРЕДЕЛЯТЬ РОЛИ (lanes) — КРИТИЧЕСКИ ВАЖНО:\n- Минимум 2 дорожки если в процессе участвуют и человек и система\n- Lane = КТО выполняет действие: должность, роль, название системы\n- Пользователь/сотрудник/человек → отдельная lane с именем должности или "Пользователь"\n- Система/портал/программа → отдельная lane с названием системы\n- Одна роль = одна lane. Не смешивай разных участников в одну lane\n- Пример: если документ описывает работу в портале ЭМ — lanes: "Пользователь ЭМ" и "ЭМ (система)"\n- ОБЯЗАТЕЛЬНО: поле "name" у каждой lane НИКОГДА не пустое. Всегда указывай конкретное имя роли из документа\n- Человек/сотрудник → его должность или "Пользователь"\n- Портал/система/программа → название системы (например "ЭМ", "1С", "SAP")\n- Если роль не указана явно → "Участник процесса"\n- Это правило работает для ЛЮБОГО документа любого формата\n\nКАК РАСПРЕДЕЛЯТЬ ЭЛЕМЕНТЫ ПО LANES:\n- Действие выполняет человек вручную (нажал, ввёл, выбрал, перешёл) → в lane пользователя\n- Действие выполняет система автоматически (открылось, загрузилось, авторизовало) → в lane системы\n- Каждый элемент строго в одной lane\n\nКАК ОПРЕДЕЛЯТЬ ТИПЫ:\n- startEvent: самое первое действие процесса\n- endEvent: самое последнее действие процесса\n- userTask: человек делает вручную (нажать, ввести, выбрать, перейти, подключить)\n- serviceTask: система делает автоматически (открыть окно, авторизовать, загрузить)\n- exclusiveGateway: ТОЛЬКО если есть явное условие (если/или/при наличии/при отсутствии)\n\nПРАВИЛА FLOWS (стрелки между элементами):\n- Соединяй в порядке описания в документе\n- Стрелки МОГУТ и ДОЛЖНЫ идти между разными lanes (cross-lane flows)\n- exclusiveGateway → минимум 2 исходящих стрелки с подписями\n- Стрелка "Нет" от шлюза → элемент в той же lane\n- Стрелка "Да" → следующий шаг основного потока\n\nФОРМАТ НАЗВАНИЙ:\n- Максимум 5 слов\n- На русском языке\n- Точно отражает действие из документа\n\nТОЛЬКО JSON. Никаких пояснений.' },
+              { role: 'system', content: 'Ты аналитик BPMN 2.0. Верни ТОЛЬКО валидный JSON без markdown, без пояснений.\n\nГЛАВНОЕ ПРАВИЛО: читай документ дословно. Каждое упомянутое действие = отдельный элемент. НЕ объединяй шаги. НЕ пропускай шаги. НЕ придумывай шаги которых нет в тексте.\n\nСТРОГОСТЬ ИЗВЛЕЧЕНИЯ:\n- Копируй названия действий ДОСЛОВНО из текста документа\n- НЕ переформулируй, НЕ обобщай, НЕ интерпретируй\n- Если в документе написано "Нажать кнопку Войти" — так и пиши, не "Авторизация"\n- Если действие описано в 2 предложениях — это 2 отдельных элемента\n- Порядок элементов = порядок в документе, без перестановок\n- exclusiveGateway ТОЛЬКО при словах: если, или, в случае, при наличии, при отсутствии, иначе\n- НЕ добавляй startEvent/endEvent с выдуманными названиями — используй текст из документа\n\nСТРУКТУРА JSON (строго соблюдай):\n{"pools":[{"id":"pool1","name":"Название процесса из документа","lanes":[{"id":"lane1","name":"Роль 1 — кто выполняет действие (человек/должность)","elements":[{"id":"e1","name":"Точное действие из текста","type":"startEvent","time_min":1}]},{"id":"lane2","name":"Роль 2 — система или другой участник","elements":[{"id":"e5","name":"Автоматическое действие системы","type":"serviceTask","time_min":1}]}]}],"flows":[{"id":"f1","from":"e1","to":"e2","label":""}]}\n\nКАК ОПРЕДЕЛЯТЬ РОЛИ (lanes) — СТРОГО:\n- Минимум 2 lanes если есть и человек и система\n- Роль определяется по субъекту действия: КТО делает это действие\n- "Пользователь нажимает" → lane Пользователя\n- "Система открывает", "портал авторизует", "окно открывается" → lane Системы\n- Название lane = точное название из документа (портал, система, должность)\n- НИКОГДА не помещай действия разных ролей в одну lane\n- Cross-lane стрелки ОБЯЗАТЕЛЬНЫ когда результат действия одной роли запускает действие другой\n- ОБЯЗАТЕЛЬНО: поле "name" у каждой lane НИКОГДА не пустое\n- Человек/сотрудник → его должность или "Пользователь"\n- Портал/система/программа → название системы (например "ЭМ", "1С", "SAP")\n- Если роль не указана явно → "Участник процесса"\n\nКАК РАСПРЕДЕЛЯТЬ ЭЛЕМЕНТЫ ПО LANES:\n- Действие выполняет человек вручную (нажал, ввёл, выбрал, перешёл) → в lane пользователя\n- Действие выполняет система автоматически (открылось, загрузилось, авторизовало) → в lane системы\n- Каждый элемент строго в одной lane\n\nКАК ОПРЕДЕЛЯТЬ ТИПЫ:\n- startEvent: самое первое действие процесса\n- endEvent: самое последнее действие процесса\n- userTask: человек делает вручную (нажать, ввести, выбрать, перейти, подключить)\n- serviceTask: система делает автоматически (открыть окно, авторизовать, загрузить)\n- exclusiveGateway: ТОЛЬКО если есть явное условие (если/или/при наличии/при отсутствии)\n\nПРАВИЛА FLOWS (стрелки между элементами):\n- Соединяй в порядке описания в документе\n- Стрелки МОГУТ и ДОЛЖНЫ идти между разными lanes (cross-lane flows)\n- exclusiveGateway → минимум 2 исходящих стрелки с подписями\n- Стрелка "Нет" от шлюза → элемент в той же lane\n- Стрелка "Да" → следующий шаг основного потока\n\nФОРМАТ НАЗВАНИЙ:\n- Максимум 5 слов\n- На русском языке\n- Точно отражает действие из документа\n\nТОЛЬКО JSON. Никаких пояснений.' },
               { role: 'user', content: `Проанализируй бизнес-процесс и верни JSON:\n\n${textContent.slice(0, 6000)}` }
             ],
             temperature: 0.1,
@@ -1111,6 +1195,13 @@
         window.currentBpmnXML = bpmnXml;
         if (!window.bpmnViewer) {
           window.bpmnViewer = new window.BpmnModeler({ container: '#bpmn-canvas' });
+          // Zoom with mouse wheel (registered once)
+          document.getElementById('bpmn-canvas').addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const canvas = window.bpmnViewer.get('canvas');
+            const delta  = e.deltaY > 0 ? -0.1 : 0.1;
+            canvas.zoom(Math.min(Math.max(canvas.zoom() + delta, 0.3), 3));
+          }, { passive: false });
         }
         try {
           await window.bpmnViewer.importXML(bpmnXml);
@@ -1750,6 +1841,84 @@ ${shapes}${edges}    </bpmndi:BPMNPlane>
         log('ERROR', 'Ошибка экспорта SVG: ' + e.message);
       }
     });
+
+    // --- EDITOR PANEL ---
+
+    const ELEM_TYPES = ['startEvent', 'endEvent', 'userTask', 'serviceTask', 'exclusiveGateway'];
+
+    function _editorLaneNames() {
+      if (!window.currentBpmnData?.pools) return ['Участник процесса'];
+      return window.currentBpmnData.pools[0].lanes.map(l => l.name);
+    }
+
+    function _addEditorRow(tbody, el, laneName, laneNames) {
+      const tr = document.createElement('tr');
+      const laneOpts = laneNames.map(n =>
+        `<option value="${n.replace(/"/g,'&quot;')}"${n === laneName ? ' selected' : ''}>${n}</option>`
+      ).join('');
+      const typeOpts = ELEM_TYPES.map(t =>
+        `<option${t === el.type ? ' selected' : ''}>${t}</option>`
+      ).join('');
+      tr.innerHTML = `
+        <td><select class="ed-lane">${laneOpts}</select></td>
+        <td><input class="ed-name" value="${(el.name||'').replace(/"/g,'&quot;')}"/></td>
+        <td><select class="ed-type">${typeOpts}</select></td>
+        <td><button class="ed-del-btn" onclick="this.closest('tr').remove()">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    function toggleEditor() {
+      const panel = document.getElementById('editorPanel');
+      const opening = panel.style.display === 'none';
+      panel.style.display = opening ? 'block' : 'none';
+      document.getElementById('editBtn').textContent = opening ? '✖ Закрыть редактор' : '✏️ Редактировать';
+      if (opening) {
+        const tbody = document.querySelector('#elementsTable tbody');
+        tbody.innerHTML = '';
+        if (!window.currentBpmnData?.pools) return;
+        const laneNames = _editorLaneNames();
+        window.currentBpmnData.pools[0].lanes.forEach(lane => {
+          (lane.elements || []).forEach(el => _addEditorRow(tbody, el, lane.name, laneNames));
+        });
+      }
+    }
+
+    function addElement() {
+      const tbody = document.querySelector('#elementsTable tbody');
+      const laneNames = _editorLaneNames();
+      _addEditorRow(tbody, { name: '', type: 'userTask' }, laneNames[0] || '', laneNames);
+    }
+
+    async function applyEdits() {
+      if (!window.currentBpmnData?.pools) { log('ERROR', 'Нет данных для редактирования'); return; }
+      const pool = window.currentBpmnData.pools[0];
+      // Reset elements in each lane
+      pool.lanes.forEach(l => { l.elements = []; });
+      const rows = document.querySelectorAll('#elementsTable tbody tr');
+      rows.forEach((row, i) => {
+        const laneName = row.querySelector('.ed-lane').value;
+        const name     = row.querySelector('.ed-name').value.trim();
+        const type     = row.querySelector('.ed-type').value;
+        if (!name) return;
+        const lane = pool.lanes.find(l => l.name === laneName);
+        if (lane) lane.elements.push({ id: `e_ed_${i}`, name, type, time_min: 1 });
+      });
+      // Rebuild flows as linear sequence across all elements in document order
+      const allEls = pool.lanes.flatMap(l => l.elements);
+      window.currentBpmnData.flows = allEls.slice(0, -1).map((el, i) => ({
+        id: `f_ed_${i}`, from: el.id, to: allEls[i + 1].id, label: ''
+      }));
+      const bpmnXml = generateBPMNXML(window.currentBpmnData);
+      window.currentBpmnXML = bpmnXml;
+      try {
+        await window.bpmnViewer.importXML(bpmnXml);
+        window.bpmnViewer.get('canvas').zoom('fit-viewport');
+        log('OK', 'Диаграмма обновлена');
+      } catch (e) {
+        log('ERROR', 'Ошибка рендеринга: ' + e.message);
+      }
+    }
 
     // --- AUTHENTICATION & ADMIN LOGIC ---
     
