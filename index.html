@@ -10,9 +10,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17/dist/assets/diagram-js.css">
-  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17/dist/assets/bpmn-js.css">
-  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17/dist/assets/bpmn-font/css/bpmn.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bpmn-js@17/dist/assets/diagram-js.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bpmn-js@17/dist/assets/bpmn-js.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bpmn-js@17/dist/assets/bpmn-font/css/bpmn.css">
+  <script type="module" src="/src/bpmn-init.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -1106,8 +1107,7 @@
         const bpmnXml = generateBPMNXML(window.currentBpmnData);
         window.currentBpmnXML = bpmnXml;
         if (!window.bpmnViewer) {
-          const { default: BpmnModeler } = await import('/node_modules/bpmn-js/dist/bpmn-modeler.production.min.js');
-          window.bpmnViewer = new BpmnModeler({ container: '#bpmn-canvas' });
+          window.bpmnViewer = new window.BpmnModeler({ container: '#bpmn-canvas' });
         }
         try {
           await window.bpmnViewer.importXML(bpmnXml);
